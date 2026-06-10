@@ -676,6 +676,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
         cwd: repoRoot,
         // Windows needs shell mode to resolve .cmd shims (e.g. vp.cmd).
         shell: process.platform === "win32",
+        // Inject the release version so the web bundle's APP_VERSION matches
+        // the installer/updater version instead of falling back to the
+        // (rarely-bumped) apps/web/package.json version.
+        env: { ...process.env, APP_VERSION: appVersion },
       })`vp run build:desktop`,
       { label: "vp run build:desktop", verbose: options.verbose },
     );
