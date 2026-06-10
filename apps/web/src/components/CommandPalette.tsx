@@ -99,7 +99,7 @@ import {
 } from "./CommandPalette.logic";
 import { resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { CommandPaletteResults } from "./CommandPaletteResults";
-import { AzureDevOpsIcon, BitbucketIcon, GitHubIcon, GitLabIcon } from "./Icons";
+import { GitHubIcon, GitLabIcon } from "./Icons";
 import { ProjectFavicon } from "./ProjectFavicon";
 import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { useServerKeybindings } from "../rpc/serverState";
@@ -153,7 +153,7 @@ interface AddProjectEnvironmentOption {
 
 type AddProjectRemoteProviderKind = Extract<
   SourceControlProviderKind,
-  "github" | "gitlab" | "bitbucket" | "azure-devops"
+  "github" | "gitlab"
 >;
 type AddProjectRemoteSource = AddProjectRemoteProviderKind | "url";
 
@@ -176,14 +176,10 @@ const REMOTE_PROJECT_SOURCES: ReadonlyArray<AddProjectRemoteSource> = [
   "url",
   "github",
   "gitlab",
-  "bitbucket",
-  "azure-devops",
 ];
 const REMOTE_PROJECT_PROVIDER_SOURCES: ReadonlyArray<AddProjectRemoteProviderKind> = [
   "github",
   "gitlab",
-  "bitbucket",
-  "azure-devops",
 ];
 
 function remoteProjectSourceLabel(source: AddProjectRemoteSource): string {
@@ -192,10 +188,6 @@ function remoteProjectSourceLabel(source: AddProjectRemoteSource): string {
       return "GitHub";
     case "gitlab":
       return "GitLab";
-    case "bitbucket":
-      return "Bitbucket";
-    case "azure-devops":
-      return "Azure DevOps";
     case "url":
       return "Git URL";
   }
@@ -207,10 +199,6 @@ function remoteProjectSourcePathHint(source: AddProjectRemoteSource): string {
       return "owner/repo";
     case "gitlab":
       return "group/project";
-    case "bitbucket":
-      return "workspace/repository";
-    case "azure-devops":
-      return "project/repository";
     case "url":
       return "URL";
   }
@@ -228,10 +216,6 @@ function remoteProjectSourceIcon(source: AddProjectRemoteSource, className: stri
       return <GitHubIcon className={className} />;
     case "gitlab":
       return <GitLabIcon className={className} />;
-    case "bitbucket":
-      return <BitbucketIcon className={className} />;
-    case "azure-devops":
-      return <AzureDevOpsIcon className={className} />;
     case "url":
       return <LinkIcon className={className} />;
   }
@@ -279,8 +263,6 @@ function buildAddProjectRemoteSourceReadiness(
     url: { ready: true, hint: null },
     github: unavailable,
     gitlab: unavailable,
-    bitbucket: unavailable,
-    "azure-devops": unavailable,
   };
 
   if (!discovery) {
@@ -1022,9 +1004,6 @@ function OpenCommandPaletteDialog() {
       "git",
       "github",
       "gitlab",
-      "bitbucket",
-      "azure",
-      "devops",
       "url",
       "environment",
     ],

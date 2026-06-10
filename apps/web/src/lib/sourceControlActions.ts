@@ -335,7 +335,7 @@ export function useVcsPullAction(scope: SourceControlActionScope) {
 export function useSourceControlPublishRepositoryAction(scope: SourceControlActionScope) {
   const action = useCallback(
     async (args: {
-      provider: "github" | "gitlab" | "bitbucket" | "azure-devops";
+      provider: "github" | "gitlab";
       repository: string;
       visibility: SourceControlRepositoryVisibility;
       remoteName: string;

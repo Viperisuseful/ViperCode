@@ -24,7 +24,7 @@ import type { EnvironmentScopedProjectShell } from "./shellTypes.ts";
 
 export type AddProjectRemoteProviderKind = Extract<
   SourceControlProviderKind,
-  "github" | "gitlab" | "bitbucket" | "azure-devops"
+  "github" | "gitlab"
 >;
 export type AddProjectRemoteSource = AddProjectRemoteProviderKind | "url";
 
@@ -52,15 +52,11 @@ export const ADD_PROJECT_REMOTE_SOURCES: ReadonlyArray<AddProjectRemoteSource> =
   "url",
   "github",
   "gitlab",
-  "bitbucket",
-  "azure-devops",
 ];
 
 export const ADD_PROJECT_REMOTE_PROVIDER_SOURCES: ReadonlyArray<AddProjectRemoteProviderKind> = [
   "github",
   "gitlab",
-  "bitbucket",
-  "azure-devops",
 ];
 
 export function addProjectRemoteSourceLabel(source: AddProjectRemoteSource): string {
@@ -69,10 +65,6 @@ export function addProjectRemoteSourceLabel(source: AddProjectRemoteSource): str
       return "GitHub";
     case "gitlab":
       return "GitLab";
-    case "bitbucket":
-      return "Bitbucket";
-    case "azure-devops":
-      return "Azure DevOps";
     case "url":
       return "Git URL";
   }
@@ -84,10 +76,6 @@ export function addProjectRemoteSourcePathHint(source: AddProjectRemoteSource): 
       return "owner/repo";
     case "gitlab":
       return "group/project";
-    case "bitbucket":
-      return "workspace/repository";
-    case "azure-devops":
-      return "project/repository";
     case "url":
       return "URL";
   }
@@ -128,8 +116,6 @@ export function buildAddProjectRemoteSourceReadiness(
     url: { ready: true, hint: null },
     github: unavailable,
     gitlab: unavailable,
-    bitbucket: unavailable,
-    "azure-devops": unavailable,
   };
 
   if (!discovery) {
