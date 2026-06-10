@@ -43,7 +43,7 @@ const lightLanguageIds = toLowercaseLookup(manifest.light.languageIds ?? {});
 const languageIdByExtension = toLowercaseLookup(languageAssociations.extensionToLanguageId);
 const languageIdByFileName = toLowercaseLookup(languageAssociations.fileNameToLanguageId);
 const localLanguageIdByExtensionOverrides = {
-  // Cursor rules files (*.mdc) are commonly treated as markdown in VSCode/Cursor.
+  // .mdc rules files are markdown-flavored; show them with the markdown icon.
   mdc: "markdown",
   // Upstream languages.ts currently maps .html to django-html before html.
   // Prefer the base HTML icon for standalone HTML files.

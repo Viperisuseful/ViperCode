@@ -1,8 +1,8 @@
 # Viper Code
 
-Viper Code is a minimal web GUI for coding agents — run Claude Code and Codex side by side in one app, with git worktrees, per-turn diffs, and one-click PRs.
+Viper Code is a minimal Windows desktop + web GUI for coding agents — run Claude Code and Codex side by side in one app, with git worktrees, per-turn diffs, and one-click PRs. Grok and OpenCode are also supported.
 
-Viper Code is a rebranded fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools Inc. (MIT licensed). The Cursor integration has been removed; Claude Code and Codex are the primary providers (Grok and OpenCode remain available).
+Download the latest installer from [Releases](https://github.com/Viperisuseful/ViperCode/releases) — the app auto-updates from this repository.
 
 ## Providers
 
@@ -56,7 +56,6 @@ node apps/server/dist/bin.mjs        # or `viper` once linked/installed
 
 ## Notes
 
-- This is a fork of an alpha-stage upstream — expect bugs.
+- Windows only. Releases ship a single NSIS `.exe` installer.
 - Docs live in [docs/](./docs).
 - Architecture overview: [docs/architecture/overview.md](./docs/architecture/overview.md)
-- Upstream remote is kept as `upstream` for pulling future T3 Code changes.

@@ -25,7 +25,7 @@ const repoRoot = resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-export const APP_DISPLAY_NAME = isDevelopment ? "Viper Code (Dev)" : "Viper Code (Alpha)";
+export const APP_DISPLAY_NAME = isDevelopment ? "Viper Code (Dev)" : "Viper Code";
 export const APP_BUNDLE_ID = isDevelopment
   ? `com.vipercode.vipercode.dev.${devBundleIdSuffix || "local"}`
   : "com.vipercode.vipercode";

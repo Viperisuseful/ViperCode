@@ -24,10 +24,8 @@ import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
-
-const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
-const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
+const BuildPlatform = Schema.Literals(["win"]);
+const BuildArch = Schema.Literals(["arm64", "x64"]);
 
 const WorkspaceConfig = Schema.Struct({
   catalog: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -51,28 +49,16 @@ const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* () {
 });
 
 interface DesktopBuildIconAssets {
-  readonly macIconPng: string;
-  readonly linuxIconPng: string;
   readonly windowsIconIco: string;
 }
 
 interface PlatformConfig {
-  readonly cliFlag: "--mac" | "--linux" | "--win";
+  readonly cliFlag: "--win";
   readonly defaultTarget: string;
   readonly archChoices: ReadonlyArray<typeof BuildArch.Type>;
 }
 
 const PLATFORM_CONFIG: Record<typeof BuildPlatform.Type, PlatformConfig> = {
-  mac: {
-    cliFlag: "--mac",
-    defaultTarget: "dmg",
-    archChoices: ["arm64", "x64", "universal"],
-  },
-  linux: {
-    cliFlag: "--linux",
-    defaultTarget: "AppImage",
-    archChoices: ["x64", "arm64"],
-  },
   win: {
     cliFlag: "--win",
     defaultTarget: "nsis",
@@ -95,8 +81,6 @@ interface BuildCliInput {
 }
 
 function detectHostBuildPlatform(hostPlatform: string): typeof BuildPlatform.Type | undefined {
-  if (hostPlatform === "darwin") return "mac";
-  if (hostPlatform === "linux") return "linux";
   if (hostPlatform === "win32") return "win";
   return undefined;
 }
@@ -436,122 +420,6 @@ const runCommand = Effect.fn("runCommand")(function* (
   }
 });
 
-function generateMacIconSet(
-  sourcePng: string,
-  targetIcns: string,
-  tmpRoot: string,
-  path: Path.Path,
-  verbose: boolean,
-) {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const iconsetDir = path.join(tmpRoot, "icon.iconset");
-    yield* fs.makeDirectory(iconsetDir, { recursive: true });
-
-    const iconSizes = [16, 32, 128, 256, 512] as const;
-    for (const size of iconSizes) {
-      yield* runCommand(
-        ChildProcess.make(
-          {},
-        )`sips -z ${size} ${size} ${sourcePng} --out ${path.join(iconsetDir, `icon_${size}x${size}.png`)}`,
-        { label: `sips icon ${size}x${size}`, verbose },
-      );
-
-      const retinaSize = size * 2;
-      yield* runCommand(
-        ChildProcess.make(
-          {},
-        )`sips -z ${retinaSize} ${retinaSize} ${sourcePng} --out ${path.join(iconsetDir, `icon_${size}x${size}@2x.png`)}`,
-        { label: `sips icon ${size}x${size}@2x`, verbose },
-      );
-    }
-
-    yield* runCommand(ChildProcess.make({})`iconutil -c icns ${iconsetDir} -o ${targetIcns}`, {
-      label: "iconutil icns",
-      verbose,
-    });
-  });
-}
-
-function stageMacIcons(stageResourcesDir: string, sourcePng: string, verbose: boolean) {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    if (!(yield* fs.exists(sourcePng))) {
-      return yield* new BuildScriptError({
-        message: `Desktop macOS icon source is missing at ${sourcePng}`,
-      });
-    }
-
-    const tmpRoot = yield* fs.makeTempDirectoryScoped({
-      prefix: "vipercode-icon-build-",
-    });
-
-    const iconPngPath = path.join(stageResourcesDir, "icon.png");
-    const iconIcnsPath = path.join(stageResourcesDir, "icon.icns");
-
-    yield* runCommand(ChildProcess.make({})`sips -z 512 512 ${sourcePng} --out ${iconPngPath}`, {
-      label: "sips mac icon",
-      verbose,
-    });
-
-    yield* generateMacIconSet(sourcePng, iconIcnsPath, tmpRoot, path, verbose);
-  });
-}
-
-function stageLinuxIcons(stageResourcesDir: string, sourcePng: string, verbose: boolean) {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    if (!(yield* fs.exists(sourcePng))) {
-      return yield* new BuildScriptError({
-        message: `Desktop Linux icon source is missing at ${sourcePng}`,
-      });
-    }
-
-    const iconPath = path.join(stageResourcesDir, "icon.png");
-    yield* fs.copyFile(sourcePng, iconPath);
-
-    const iconsDir = path.join(stageResourcesDir, "icons");
-    yield* fs.makeDirectory(iconsDir, { recursive: true });
-    for (const iconSize of LINUX_ICON_SIZES) {
-      yield* stageLinuxIconSize(
-        sourcePng,
-        path.join(iconsDir, `${iconSize}x${iconSize}.png`),
-        iconSize,
-        verbose,
-      );
-    }
-  });
-}
-
-function stageLinuxIconSize(
-  sourcePng: string,
-  targetPng: string,
-  iconSize: number,
-  verbose: boolean,
-) {
-  const resize = (command: string) =>
-    runCommand(
-      ChildProcess.make(command, [sourcePng, "-resize", `${iconSize}x${iconSize}`, targetPng]),
-      { label: `${command} linux icon ${iconSize}x${iconSize}`, verbose },
-    );
-
-  return resize("magick").pipe(
-    Effect.catch(() =>
-      resize("convert").pipe(
-        Effect.mapError(
-          () =>
-            new BuildScriptError({
-              message:
-                "ImageMagick is required to generate Linux desktop icon sizes. Install ImageMagick so either `magick` or `convert` is available.",
-            }),
-        ),
-      ),
-    ),
-  );
-}
-
 function stageWindowsIcons(stageResourcesDir: string, sourceIco: string) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -634,7 +502,7 @@ function resolveGitHubPublishConfig(updateChannel: "latest" | "nightly"):
   const rawRepo =
     process.env.VIPERCODE_DESKTOP_UPDATE_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY?.trim() ||
-    "";
+    "Viperisuseful/ViperCode";
   if (!rawRepo) return undefined;
 
   const [owner, repo, ...rest] = rawRepo.split("/");
@@ -656,15 +524,11 @@ export function resolveDesktopUpdateChannel(version: string): "latest" | "nightl
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     };
   }
 
   return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-    linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
     windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
   };
 }
@@ -708,34 +572,6 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     ];
   }
 
-  if (platform === "mac") {
-    buildConfig.mac = {
-      target: target === "dmg" ? [target, "zip"] : [target],
-      icon: "icon.icns",
-      category: "public.app-category.developer-tools",
-      protocols: [
-        {
-          name: "Viper Code",
-          schemes: ["vipercode"],
-        },
-      ],
-    };
-  }
-
-  if (platform === "linux") {
-    buildConfig.linux = {
-      target: [target],
-      executableName: "vipercode",
-      icon: "icons",
-      category: "Development",
-      desktop: {
-        entry: {
-          StartupWMClass: "vipercode",
-        },
-      },
-    };
-  }
-
   if (platform === "win") {
     buildConfig.npmRebuild = false;
     const winConfig: Record<string, unknown> = {
@@ -757,18 +593,7 @@ const assertPlatformBuildResources = Effect.fn("assertPlatformBuildResources")(f
   platform: typeof BuildPlatform.Type,
   stageResourcesDir: string,
   iconAssets: DesktopBuildIconAssets,
-  verbose: boolean,
 ) {
-  if (platform === "mac") {
-    yield* stageMacIcons(stageResourcesDir, iconAssets.macIconPng, verbose);
-    return;
-  }
-
-  if (platform === "linux") {
-    yield* stageLinuxIcons(stageResourcesDir, iconAssets.linuxIconPng, verbose);
-    return;
-  }
-
   if (platform === "win") {
     yield* stageWindowsIcons(stageResourcesDir, iconAssets.windowsIconIco);
   }
@@ -880,16 +705,9 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
   yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
 
-  yield* assertPlatformBuildResources(
-    options.platform,
-    stageResourcesDir,
-    {
-      macIconPng: path.join(repoRoot, iconAssets.macIconPng),
-      linuxIconPng: path.join(repoRoot, iconAssets.linuxIconPng),
-      windowsIconIco: path.join(repoRoot, iconAssets.windowsIconIco),
-    },
-    options.verbose,
-  );
+  yield* assertPlatformBuildResources(options.platform, stageResourcesDir, {
+    windowsIconIco: path.join(repoRoot, iconAssets.windowsIconIco),
+  });
 
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));

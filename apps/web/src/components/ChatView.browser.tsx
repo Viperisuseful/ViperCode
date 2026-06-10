@@ -1015,7 +1015,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("viper-oss"),
             host: Option.some("github.com"),
             detail: Option.none(),
           },
@@ -1030,7 +1030,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("viper-oss"),
             host: Option.some("gitlab.com"),
             detail: Option.none(),
           },
@@ -1045,7 +1045,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("viper-oss"),
             host: Option.some("bitbucket.org"),
             detail: Option.none(),
           },
@@ -1060,7 +1060,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
           detail: Option.none(),
           auth: {
             status: "authenticated",
-            account: Option.some("t3-oss"),
+            account: Option.some("viper-oss"),
             host: Option.some("dev.azure.com"),
             detail: Option.none(),
           },
@@ -4771,9 +4771,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
         if (body._tag === WS_METHODS.sourceControlLookupRepository) {
           return {
             provider: "github",
-            nameWithOwner: "t3-oss/t3-env",
-            url: "https://github.com/t3-oss/t3-env",
-            sshUrl: "git@github.com:t3-oss/t3-env.git",
+            nameWithOwner: "viper-oss/viper-env",
+            url: "https://github.com/viper-oss/viper-env",
+            sshUrl: "git@github.com:viper-oss/viper-env.git",
           };
         }
 
@@ -4807,7 +4807,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
       const repositoryInput = await waitForCommandPaletteInput(
         "Enter GitHub repository (owner/repo)",
       );
-      await page.getByPlaceholder("Enter GitHub repository (owner/repo)").fill("t3-oss/t3-env");
+      await page.getByPlaceholder("Enter GitHub repository (owner/repo)").fill("viper-oss/viper-env");
       await dispatchInputKey(repositoryInput, { key: "Enter" });
 
       await vi.waitFor(
@@ -4817,8 +4817,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
           );
           expect(clonePathInput?.value).toBe("~/");
           expect(document.body.textContent).toContain("Repository");
-          expect(document.body.textContent).toContain("t3-oss/t3-env");
-          expect(document.body.textContent).toContain("https://github.com/t3-oss/t3-env");
+          expect(document.body.textContent).toContain("viper-oss/viper-env");
+          expect(document.body.textContent).toContain("https://github.com/viper-oss/viper-env");
           expect(document.body.textContent).toContain("Select where to clone");
           expect(document.body.textContent).toContain("Development");
           expect(document.body.textContent).toContain("Clone");
@@ -4840,7 +4840,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
             (request) => request._tag === WS_METHODS.sourceControlCloneRepository,
           ) as { destinationPath?: string; remoteUrl?: string } | undefined;
           expect(cloneRequest).toMatchObject({
-            remoteUrl: "git@github.com:t3-oss/t3-env.git",
+            remoteUrl: "git@github.com:viper-oss/viper-env.git",
             destinationPath: "~/Development/t3env",
           });
         },
