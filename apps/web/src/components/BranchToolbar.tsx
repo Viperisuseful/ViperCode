@@ -1,5 +1,5 @@
-import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { scopeProjectRef, scopeThreadRef } from "@vipercode/client-runtime";
+import type { EnvironmentId, ThreadId } from "@vipercode/contracts";
 import {
   ChevronDownIcon,
   CloudIcon,

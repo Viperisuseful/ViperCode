@@ -1,5 +1,5 @@
-import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
-import { type ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { parseScopedThreadKey, scopeProjectRef, scopeThreadRef } from "@vipercode/client-runtime";
+import { type ScopedThreadRef, ThreadId } from "@vipercode/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
 

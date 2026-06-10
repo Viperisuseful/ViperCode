@@ -16,8 +16,8 @@ import {
   PUBLISH_ICON_OVERRIDES,
 } from "../../../scripts/lib/brand-assets.ts";
 import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog.ts";
-import { fromJsonStringPretty } from "@t3tools/shared/schemaJson";
-import { fromYaml } from "@t3tools/shared/schemaYaml";
+import { fromJsonStringPretty } from "@vipercode/shared/schemaJson";
+import { fromYaml } from "@vipercode/shared/schemaYaml";
 import serverPackageJson from "../package.json" with { type: "json" };
 
 interface PackageJson {
@@ -206,7 +206,7 @@ const createVpPmPublishArgs = (config: PublishCommandConfig): ReadonlyArray<stri
   const args = [
     "publish",
     "--filter",
-    "t3",
+    "vipercode",
     "--access",
     config.access,
     "--tag",
@@ -322,7 +322,7 @@ const publishCmd = Command.make(
 // ---------------------------------------------------------------------------
 
 const cli = Command.make("cli").pipe(
-  Command.withDescription("T3 server build & publish CLI."),
+  Command.withDescription("Viper server build & publish CLI."),
   Command.withSubcommands([buildCmd, publishCmd]),
 );
 

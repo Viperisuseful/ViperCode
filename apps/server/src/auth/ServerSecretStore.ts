@@ -33,7 +33,7 @@ export interface ServerSecretStoreShape {
 }
 
 export class ServerSecretStore extends Context.Service<ServerSecretStore, ServerSecretStoreShape>()(
-  "t3/auth/ServerSecretStore",
+  "viper/auth/ServerSecretStore",
 ) {}
 
 export const make = Effect.fn("makeServerSecretStore")(function* () {

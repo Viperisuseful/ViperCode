@@ -8,8 +8,8 @@ import {
   ProviderInstanceId,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
-import type { OrchestrationThread } from "@t3tools/contracts";
+} from "@vipercode/contracts";
+import type { OrchestrationThread } from "@vipercode/contracts";
 
 import { applyThreadDetailEvent } from "./threadDetailReducer.ts";
 
@@ -54,7 +54,7 @@ describe("applyThreadDetailEvent", () => {
         type: "project.created",
         payload: {
           projectId: ProjectId.make("project-1"),
-          title: "T3 Code",
+          title: "Viper Code",
           workspaceRoot: "/repo",
           repositoryIdentity: null,
           defaultModelSelection: null,

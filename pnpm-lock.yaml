@@ -103,19 +103,19 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.0-beta.78
         version: 4.0.0-beta.78(bufferutil@4.1.0)(effect@4.0.0-beta.78(patch_hash=883249d8efbb462e928e21fefef96027b66aec50751178cafdce45f08eee3754))(ioredis@5.11.0)(utf-8-validate@6.0.6)
-      '@t3tools/client-runtime':
+      '@vipercode/client-runtime':
         specifier: workspace:*
         version: link:../../packages/client-runtime
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@t3tools/ssh':
+      '@vipercode/ssh':
         specifier: workspace:*
         version: link:../../packages/ssh
-      '@t3tools/tailscale':
+      '@vipercode/tailscale':
         specifier: workspace:*
         version: link:../../packages/tailscale
       effect:
@@ -204,19 +204,19 @@ importers:
       '@shikijs/themes':
         specifier: 3.23.0
         version: 3.23.0
-      '@t3tools/client-runtime':
+      '@vipercode/client-runtime':
         specifier: workspace:*
         version: link:../../packages/client-runtime
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@t3tools/mobile-review-diff-native':
+      '@vipercode/mobile-review-diff-native':
         specifier: file:./modules/t3-review-diff
         version: file:apps/mobile/modules/t3-review-diff
-      '@t3tools/mobile-terminal-native':
+      '@vipercode/mobile-terminal-native':
         specifier: file:./modules/t3-terminal
         version: file:apps/mobile/modules/t3-terminal
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       clsx:
@@ -401,24 +401,24 @@ importers:
       '@effect/vitest':
         specifier: 4.0.0-beta.78
         version: 4.0.0-beta.78(patch_hash=42b87cc47e70d74e62496e7a8261b3fd298ecad4464d209348ab04b96f853a5f)(effect@4.0.0-beta.78(patch_hash=883249d8efbb462e928e21fefef96027b66aec50751178cafdce45f08eee3754))
-      '@t3tools/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@t3tools/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      '@t3tools/tailscale':
-        specifier: workspace:*
-        version: link:../../packages/tailscale
-      '@t3tools/web':
-        specifier: workspace:*
-        version: link:../web
       '@types/bun':
         specifier: 1.3.14
         version: 1.3.14
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
+      '@vipercode/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@vipercode/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@vipercode/tailscale':
+        specifier: workspace:*
+        version: link:../../packages/tailscale
+      '@vipercode/web':
+        specifier: workspace:*
+        version: link:../web
       effect-acp:
         specifier: workspace:*
         version: link:../../packages/effect-acp
@@ -467,15 +467,6 @@ importers:
       '@pierre/diffs':
         specifier: 'catalog:'
         version: 1.1.20(patch_hash=e4e35ba95100de3708f900e0d9ea62bca732b1e4486024b5055f48cd128dd9e0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@t3tools/client-runtime':
-        specifier: workspace:*
-        version: link:../../packages/client-runtime
-      '@t3tools/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@t3tools/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@tanstack/react-pacer':
         specifier: ^0.19.4
         version: 0.19.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -485,6 +476,15 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.160.2
         version: 1.170.10(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@vipercode/client-runtime':
+        specifier: workspace:*
+        version: link:../../packages/client-runtime
+      '@vipercode/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@vipercode/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -585,13 +585,13 @@ importers:
       '@effect/sql-pg':
         specifier: 4.0.0-beta.78
         version: 4.0.0-beta.78(effect@4.0.0-beta.78(patch_hash=883249d8efbb462e928e21fefef96027b66aec50751178cafdce45f08eee3754))
-      '@t3tools/client-runtime':
+      '@vipercode/client-runtime':
         specifier: workspace:*
         version: link:../../packages/client-runtime
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       alchemy:
@@ -626,7 +626,7 @@ importers:
         specifier: 'catalog:'
         version: 0.1.24(@types/node@24.12.4)(bufferutil@4.1.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(typescript@6.0.3)(unrun@0.2.39)(utf-8-validate@6.0.6)(yaml@2.9.0)
 
-  oxlint-plugin-t3code:
+  oxlint-plugin-vipercode:
     dependencies:
       '@effect/platform-node':
         specifier: 4.0.0-beta.78
@@ -647,10 +647,10 @@ importers:
 
   packages/client-runtime:
     dependencies:
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../shared
       effect:
@@ -729,7 +729,7 @@ importers:
       '@noble/hashes':
         specifier: 'catalog:'
         version: 1.8.0
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../contracts
       effect:
@@ -757,10 +757,10 @@ importers:
 
   packages/ssh:
     dependencies:
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../shared
       effect:
@@ -804,10 +804,10 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.0-beta.78
         version: 4.0.0-beta.78(bufferutil@4.1.0)(effect@4.0.0-beta.78(patch_hash=883249d8efbb462e928e21fefef96027b66aec50751178cafdce45f08eee3754))(ioredis@5.11.0)(utf-8-validate@6.0.6)
-      '@t3tools/contracts':
+      '@vipercode/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
-      '@t3tools/shared':
+      '@vipercode/shared':
         specifier: workspace:*
         version: link:../packages/shared
       effect:
@@ -4040,12 +4040,6 @@ packages:
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
 
-  '@t3tools/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff':
-    resolution: {directory: apps/mobile/modules/t3-review-diff, type: directory}
-
-  '@t3tools/mobile-terminal-native@file:apps/mobile/modules/t3-terminal':
-    resolution: {directory: apps/mobile/modules/t3-terminal, type: directory}
-
   '@tailwindcss/node@4.2.1':
     resolution: {integrity: sha512-jlx6sLk4EOwO6hHe1oCGm1Q4AN/s0rSrTTPBGPM0/RQ6Uylwq17FuU8IeJJKEjtc6K6O07zsvP+gDO6MMWo7pg==}
 
@@ -4503,6 +4497,12 @@ packages:
 
   '@vercel/routing-utils@6.2.0':
     resolution: {integrity: sha512-YI2cGYZmJKEyGSEgf5Fw5rVuW7X1bTOQ7/pnLRNTFMH3YB3qqP5erCLCJGv2kIvNo1iQAPINHQRJj6ykEdGoPg==}
+
+  '@vipercode/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff':
+    resolution: {directory: apps/mobile/modules/t3-review-diff, type: directory}
+
+  '@vipercode/mobile-terminal-native@file:apps/mobile/modules/t3-terminal':
+    resolution: {directory: apps/mobile/modules/t3-terminal, type: directory}
 
   '@vitejs/plugin-react@6.0.2':
     resolution: {integrity: sha512-DlSMqo4WhThw4vB8Mpn0Woe9J+Jfq1geJ61AKW0QEgLzGMNwtIMdxbDUzLxcun8W7NbJO0e2Jg/Nxm3cCSVzzg==}
@@ -13071,10 +13071,6 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
-  '@t3tools/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff': {}
-
-  '@t3tools/mobile-terminal-native@file:apps/mobile/modules/t3-terminal': {}
-
   '@tailwindcss/node@4.2.1':
     dependencies:
       '@jridgewell/remapping': 2.3.5
@@ -13526,6 +13522,10 @@ snapshots:
       path-to-regexp-updated: path-to-regexp@6.3.0
     optionalDependencies:
       ajv: 6.15.0
+
+  '@vipercode/mobile-review-diff-native@file:apps/mobile/modules/t3-review-diff': {}
+
+  '@vipercode/mobile-terminal-native@file:apps/mobile/modules/t3-terminal': {}
 
   '@vitejs/plugin-react@6.0.2(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7)(@babel/plugin-transform-runtime@7.29.7(@babel/core@7.29.7))(@babel/runtime@7.29.7)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.12.4)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(rolldown@1.0.3))(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.12.4)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(typescript@6.0.3)(unrun@0.2.39)(yaml@2.9.0))(babel-plugin-react-compiler@1.0.0)':
     dependencies:

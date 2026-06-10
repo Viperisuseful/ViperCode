@@ -77,21 +77,21 @@ describe("ProviderSessionStartInput", () => {
     expect(parsed.runtimeMode).toBe("full-access");
   });
 
-  it("accepts cursor provider", () => {
+  it("accepts grok provider", () => {
     const parsed = decodeProviderSessionStartInput({
       threadId: "thread-1",
-      provider: "cursor",
+      provider: "grok",
       cwd: "/tmp/workspace",
       runtimeMode: "full-access",
       modelSelection: {
-        provider: "cursor",
-        model: "composer-2",
+        provider: "grok",
+        model: "grok-build",
         options: [{ id: "fastMode", value: true }],
       },
     });
-    expect(parsed.provider).toBe("cursor");
-    expect(parsed.modelSelection?.instanceId).toBe("cursor");
-    expect(parsed.modelSelection?.model).toBe("composer-2");
+    expect(parsed.provider).toBe("grok");
+    expect(parsed.modelSelection?.instanceId).toBe("grok");
+    expect(parsed.modelSelection?.model).toBe("grok-build");
     expect(getOptionValue(parsed.modelSelection?.options, "fastMode")).toBe(true);
   });
 

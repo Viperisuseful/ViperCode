@@ -1,90 +1,62 @@
-# T3 Code
+# Viper Code
 
-T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
+Viper Code is a minimal web GUI for coding agents — run Claude Code and Codex side by side in one app, with git worktrees, per-turn diffs, and one-click PRs.
 
-## Installation
+Viper Code is a rebranded fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools Inc. (MIT licensed). The Cursor integration has been removed; Claude Code and Codex are the primary providers (Grok and OpenCode remain available).
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, and OpenCode.
-> Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `cursor-agent login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+## Providers
 
-### Run without installing
+Install and authenticate at least one provider before use:
 
-```bash
-npx t3@latest
-```
+- Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude` once to log in
+- Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
+- OpenCode (optional): install [OpenCode](https://opencode.ai) and run `opencode auth login`
+- Grok (optional): install the Grok CLI and log in
 
-Tip: Use `npx t3@latest --help` for the full CLI reference.
+## Development setup
 
-### Desktop app
+Requirements:
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
+- Node.js 24+ (Node 25 works)
+- pnpm 10 (`npm install -g pnpm@10.24.0`)
+- Vite+ (`npm install -g vite-plus@0.1.24`, provides the `vp` command)
 
 ```bash
-winget install T3Tools.T3Code
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask t3-code
-```
-
-#### Arch Linux (AUR)
-
-```bash
-yay -S t3code-bin
-```
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are not accepting contributions yet.
-
-There's no public docs site yet, checkout the miscellaneous markdown files in [docs](./docs).
-
-## Documentation
-
-- [Getting started](./docs/getting-started/quick-start.md)
-- [Architecture overview](./docs/architecture/overview.md)
-- [Provider guides](./docs/providers/codex.md)
-- [Operations](./docs/operations/ci.md)
-- [Reference](./docs/reference/encyclopedia.md)
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
+# install dependencies
 vp i
+
+# run the web app + server in dev mode
+pnpm dev
+
+# run the Electron desktop app in dev mode
+pnpm dev:desktop
+
+# typecheck / test
+pnpm typecheck
+pnpm test
 ```
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
+## Building the desktop app (Windows)
 
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+```bash
+pnpm build:desktop
+pnpm dist:desktop:win
+```
+
+The installer lands in the output directory printed by the build script. Auto-update is disabled unless you set `VIPERCODE_DESKTOP_UPDATE_REPOSITORY=<owner>/<repo>` at build time to point at your own GitHub releases.
+
+## CLI
+
+The server package builds a `viper` CLI (`apps/server`, bin `viper`):
+
+```bash
+pnpm build
+node apps/server/dist/bin.mjs        # or `viper` once linked/installed
+```
+
+## Notes
+
+- This is a fork of an alpha-stage upstream — expect bugs.
+- Docs live in [docs/](./docs).
+- Architecture overview: [docs/architecture/overview.md](./docs/architecture/overview.md)
+- Upstream remote is kept as `upstream` for pulling future T3 Code changes.

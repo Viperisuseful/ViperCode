@@ -10,7 +10,7 @@
  *
  *  2. **Many drivers, one registry** — the "all drivers slice" describe
  *     block below configures one instance of every shipped driver
- *     (`codex`, `claudeAgent`, `cursor`, `grok`, `opencode`) in a single
+ *     (`codex`, `claudeAgent`, `grok`, `opencode`) in a single
  *     `ProviderInstanceConfigMap` and asserts the registry boots them all
  *     without cross-contamination. This proves the driver SPI is uniform
  *     across every provider — any driver plugs into the registry through
@@ -27,13 +27,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   type ClaudeSettings,
   type CodexSettings,
-  type CursorSettings,
   type GrokSettings,
   type OpenCodeSettings,
   ProviderDriverKind,
   type ProviderInstanceConfigMap,
   ProviderInstanceId,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -41,7 +40,6 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ServerConfig } from "../../config.ts";
 import { ClaudeDriver } from "../Drivers/ClaudeDriver.ts";
 import { CodexDriver } from "../Drivers/CodexDriver.ts";
-import { CursorDriver } from "../Drivers/CursorDriver.ts";
 import { GrokDriver } from "../Drivers/GrokDriver.ts";
 import { OpenCodeDriver } from "../Drivers/OpenCodeDriver.ts";
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
@@ -70,14 +68,6 @@ const makeClaudeConfig = (overrides: Partial<ClaudeSettings>): ClaudeSettings =>
   homePath: "",
   customModels: [],
   launchArgs: "",
-  ...overrides,
-});
-
-const makeCursorConfig = (overrides: Partial<CursorSettings>): CursorSettings => ({
-  enabled: false,
-  binaryPath: "agent",
-  apiEndpoint: "",
-  customModels: [],
   ...overrides,
 });
 
@@ -252,13 +242,11 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
     Effect.gen(function* () {
       const codexId = ProviderInstanceId.make("codex_default");
       const claudeId = ProviderInstanceId.make("claude_default");
-      const cursorId = ProviderInstanceId.make("cursor_default");
       const grokId = ProviderInstanceId.make("grok_default");
       const openCodeId = ProviderInstanceId.make("opencode_default");
 
       const codexDriverKind = ProviderDriverKind.make("codex");
       const claudeDriverKind = ProviderDriverKind.make("claudeAgent");
-      const cursorDriverKind = ProviderDriverKind.make("cursor");
       const grokDriverKind = ProviderDriverKind.make("grok");
       const openCodeDriverKind = ProviderDriverKind.make("opencode");
 
@@ -278,12 +266,6 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
             launchArgs: "--verbose",
           }),
         },
-        [cursorId]: {
-          driver: cursorDriverKind,
-          displayName: "Cursor",
-          enabled: false,
-          config: makeCursorConfig({}),
-        },
         [grokId]: {
           driver: grokDriverKind,
           displayName: "Grok",
@@ -299,7 +281,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       };
 
       const { registry } = yield* makeProviderInstanceRegistry({
-        drivers: [CodexDriver, ClaudeDriver, CursorDriver, GrokDriver, OpenCodeDriver],
+        drivers: [CodexDriver, ClaudeDriver, GrokDriver, OpenCodeDriver],
         configMap,
       });
 
@@ -309,9 +291,9 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(unavailable).toEqual([]);
 
       const instances = yield* registry.listInstances;
-      expect(instances).toHaveLength(5);
+      expect(instances).toHaveLength(4);
       expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
-        [codexId, claudeId, cursorId, grokId, openCodeId].toSorted(),
+        [codexId, claudeId, grokId, openCodeId].toSorted(),
       );
 
       // Instance lookup by id resolves each instance to its own bundle —
@@ -319,29 +301,25 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       // model. Each driver's bundle carries its advertised `driverKind`.
       const codex = yield* registry.getInstance(codexId);
       const claude = yield* registry.getInstance(claudeId);
-      const cursor = yield* registry.getInstance(cursorId);
       const grok = yield* registry.getInstance(grokId);
       const openCode = yield* registry.getInstance(openCodeId);
       expect(codex?.driverKind).toBe(codexDriverKind);
       expect(claude?.driverKind).toBe(claudeDriverKind);
-      expect(cursor?.driverKind).toBe(cursorDriverKind);
       expect(grok?.driverKind).toBe(grokDriverKind);
       expect(openCode?.driverKind).toBe(openCodeDriverKind);
       expect(codex?.displayName).toBe("Codex");
       expect(claude?.displayName).toBe("Claude");
-      expect(cursor?.displayName).toBe("Cursor");
       expect(grok?.displayName).toBe("Grok");
       expect(openCode?.displayName).toBe("OpenCode");
 
       // Every instance owns its own set of closures — no sharing across
       // drivers. `adapter` / `textGeneration` / `snapshot` are all
       // distinct references even when two instances happen to share a
-      // trait (e.g. Cursor + others all use a stub-or-real
+      // trait (e.g. several drivers all use a stub-or-real
       // `textGeneration`; they must still be different object values).
       const adapters = [
         codex!.adapter,
         claude!.adapter,
-        cursor!.adapter,
         grok!.adapter,
         openCode!.adapter,
       ];
@@ -349,7 +327,6 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       const textGenerations = [
         codex!.textGeneration,
         claude!.textGeneration,
-        cursor!.textGeneration,
         grok!.textGeneration,
         openCode!.textGeneration,
       ];
@@ -357,7 +334,6 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       const snapshots = [
         codex!.snapshot,
         claude!.snapshot,
-        cursor!.snapshot,
         grok!.snapshot,
         openCode!.snapshot,
       ];
@@ -380,14 +356,6 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(claudeSnapshot.driver).toBe(claudeDriverKind);
       expect(claudeSnapshot.enabled).toBe(false);
       expect(claudeSnapshot.continuation?.groupKey).toBe("claude:home:/home/julius/.claude-work");
-
-      const cursorSnapshot = yield* cursor!.snapshot.getSnapshot;
-      expect(cursorSnapshot.instanceId).toBe(cursorId);
-      expect(cursorSnapshot.driver).toBe(cursorDriverKind);
-      expect(cursorSnapshot.enabled).toBe(false);
-      expect(cursorSnapshot.continuation?.groupKey).toBe(
-        `${cursorDriverKind}:instance:${cursorId}`,
-      );
 
       const grokSnapshot = yield* grok!.snapshot.getSnapshot;
       expect(grokSnapshot.instanceId).toBe(grokId);

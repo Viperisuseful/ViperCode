@@ -62,16 +62,6 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
         args: ["/tmp/workspace"],
       });
 
-      const cursorLaunch = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace", editor: "cursor" },
-        "darwin",
-        { PATH: "" },
-      );
-      assert.deepEqual(cursorLaunch, {
-        command: "cursor",
-        args: ["/tmp/workspace"],
-      });
-
       const traeLaunch = yield* resolveEditorLaunch(
         { cwd: "/tmp/workspace", editor: "trae" },
         "darwin",
@@ -242,23 +232,13 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
   it.effect("applies launch-style-specific navigation arguments", () =>
     Effect.gen(function* () {
       const lineOnly = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/AGENTS.md:48", editor: "cursor" },
+        { cwd: "/tmp/workspace/AGENTS.md:48", editor: "trae" },
         "darwin",
         { PATH: "" },
       );
       assert.deepEqual(lineOnly, {
-        command: "cursor",
+        command: "trae",
         args: ["--goto", "/tmp/workspace/AGENTS.md:48"],
-      });
-
-      const lineAndColumn = yield* resolveEditorLaunch(
-        { cwd: "/tmp/workspace/src/process/externalLauncher.ts:71:5", editor: "cursor" },
-        "darwin",
-        { PATH: "" },
-      );
-      assert.deepEqual(lineAndColumn, {
-        command: "cursor",
-        args: ["--goto", "/tmp/workspace/src/process/externalLauncher.ts:71:5"],
       });
 
       const traeLineAndColumn = yield* resolveEditorLaunch(
@@ -451,7 +431,7 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
       yield* fs.writeFileString(path.join(dir, "zeditor"), "#!/bin/sh\nexit 0\n");
       yield* fs.chmod(path.join(dir, "zeditor"), 0o755);
 
@@ -651,7 +631,7 @@ it.layer(NodeServices.layer)("launchEditorProcess", (it) => {
     Effect.gen(function* () {
       const spawnerLayer = Layer.mock(ChildProcessSpawner.ChildProcessSpawner, {});
       const result = yield* launchEditorProcess({
-        command: `t3code-no-such-command-${yield* Crypto.Crypto.pipe(
+        command: `vipercode-no-such-command-${yield* Crypto.Crypto.pipe(
           Effect.flatMap((crypto) => crypto.randomUUIDv4),
         )}`,
         args: [],
@@ -666,7 +646,7 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
       yield* fs.writeFileString(path.join(dir, "code.CMD"), "@echo off\r\n");
       const env = {
         PATH: dir,
@@ -688,7 +668,7 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
       yield* fs.writeFileString(path.join(dir, "npm"), "echo nope\r\n");
       const env = {
         PATH: dir,
@@ -702,7 +682,7 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
       yield* fs.writeFileString(path.join(dir, "my.tool.CMD"), "@echo off\r\n");
       const env = {
         PATH: dir,
@@ -716,8 +696,8 @@ it.layer(NodeServices.layer)("isCommandAvailable", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const firstDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
-      const secondDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-external-launcher-test-" });
+      const firstDir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
+      const secondDir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-external-launcher-test-" });
       yield* fs.writeFileString(path.join(firstDir, "code.CMD"), "@echo off\r\n");
       yield* fs.writeFileString(path.join(secondDir, "code.CMD"), "MZ");
       const env = {
@@ -734,7 +714,7 @@ it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editors-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-editors-" });
 
       yield* fs.writeFileString(path.join(dir, "trae.CMD"), "@echo off\r\n");
       yield* fs.writeFileString(path.join(dir, "kiro.CMD"), "@echo off\r\n");
@@ -781,7 +761,7 @@ it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-editors-" });
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "viper-editors-" });
 
       yield* fs.writeFileString(path.join(dir, "zeditor"), "#!/bin/sh\nexit 0\n");
       yield* fs.writeFileString(path.join(dir, "xdg-open"), "#!/bin/sh\nexit 0\n");

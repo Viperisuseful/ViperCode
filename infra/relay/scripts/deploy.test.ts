@@ -40,18 +40,18 @@ describe("hasDeployChanges", () => {
 describe("reconcileRootEnvRelayUrl", () => {
   it("adds the relay URL to an empty root env file", () => {
     expect(reconcileRootEnvRelayUrl("", "https://relay.example.test")).toBe(
-      "T3CODE_RELAY_URL=https://relay.example.test\n",
+      "VIPERCODE_RELAY_URL=https://relay.example.test\n",
     );
   });
 
   it("preserves unrelated root env entries while replacing a previous relay URL", () => {
     expect(
       reconcileRootEnvRelayUrl(
-        "T3CODE_CLERK_PUBLISHABLE_KEY=pk_test_example\nT3CODE_RELAY_URL=https://old.example.test\n",
+        "VIPERCODE_CLERK_PUBLISHABLE_KEY=pk_test_example\nVIPERCODE_RELAY_URL=https://old.example.test\n",
         "https://relay.example.test",
       ),
     ).toBe(
-      "T3CODE_CLERK_PUBLISHABLE_KEY=pk_test_example\nT3CODE_RELAY_URL=https://relay.example.test\n",
+      "VIPERCODE_CLERK_PUBLISHABLE_KEY=pk_test_example\nVIPERCODE_RELAY_URL=https://relay.example.test\n",
     );
   });
 });
@@ -60,17 +60,17 @@ describe("reconcileRootEnvPublicConfig", () => {
   const config = {
     relayUrl: "https://relay.example.test",
     mobileTracingUrl: "https://api.axiom.co/v1/traces",
-    mobileTracingDataset: "t3-code-mobile-traces-dev",
+    mobileTracingDataset: "viper-code-mobile-traces-dev",
     mobileTracingToken: "xaat-public-ingest",
   } as const;
 
   it("adds the complete local client config", () => {
     expect(reconcileRootEnvPublicConfig("", config)).toBe(
       [
-        "T3CODE_RELAY_URL=https://relay.example.test",
-        "T3CODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
-        "T3CODE_MOBILE_OTLP_TRACES_DATASET=t3-code-mobile-traces-dev",
-        "T3CODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "VIPERCODE_RELAY_URL=https://relay.example.test",
+        "VIPERCODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "VIPERCODE_MOBILE_OTLP_TRACES_DATASET=viper-code-mobile-traces-dev",
+        "VIPERCODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
         "",
       ].join("\n"),
     );
@@ -80,22 +80,22 @@ describe("reconcileRootEnvPublicConfig", () => {
     expect(
       reconcileRootEnvPublicConfig(
         [
-          "T3CODE_CLERK_PUBLISHABLE_KEY=pk_test_example",
-          "T3CODE_RELAY_URL=https://old.example.test",
-          "T3CODE_MOBILE_OTLP_TRACES_URL=https://old.example.test/v1/traces",
-          "T3CODE_MOBILE_OTLP_TRACES_DATASET=old-dataset",
-          "T3CODE_MOBILE_OTLP_TRACES_TOKEN=old-token",
+          "VIPERCODE_CLERK_PUBLISHABLE_KEY=pk_test_example",
+          "VIPERCODE_RELAY_URL=https://old.example.test",
+          "VIPERCODE_MOBILE_OTLP_TRACES_URL=https://old.example.test/v1/traces",
+          "VIPERCODE_MOBILE_OTLP_TRACES_DATASET=old-dataset",
+          "VIPERCODE_MOBILE_OTLP_TRACES_TOKEN=old-token",
           "",
         ].join("\n"),
         config,
       ),
     ).toBe(
       [
-        "T3CODE_CLERK_PUBLISHABLE_KEY=pk_test_example",
-        "T3CODE_RELAY_URL=https://relay.example.test",
-        "T3CODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
-        "T3CODE_MOBILE_OTLP_TRACES_DATASET=t3-code-mobile-traces-dev",
-        "T3CODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
+        "VIPERCODE_CLERK_PUBLISHABLE_KEY=pk_test_example",
+        "VIPERCODE_RELAY_URL=https://relay.example.test",
+        "VIPERCODE_MOBILE_OTLP_TRACES_URL=https://api.axiom.co/v1/traces",
+        "VIPERCODE_MOBILE_OTLP_TRACES_DATASET=viper-code-mobile-traces-dev",
+        "VIPERCODE_MOBILE_OTLP_TRACES_TOKEN=xaat-public-ingest",
         "",
       ].join("\n"),
     );

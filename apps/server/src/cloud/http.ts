@@ -11,7 +11,7 @@ import {
   EnvironmentHttpConflictError,
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import {
   RelayCloudEnvironmentHealthProofPayload,
   RelayCloudEnvironmentHealthRequest,
@@ -28,7 +28,7 @@ import {
   RelayEnvironmentLinkProofPayload,
   RelayLinkProofRequest,
   RelayManagedEndpointOrigin,
-} from "@t3tools/contracts/relay";
+} from "@vipercode/contracts/relay";
 import {
   normalizeRelayIssuer,
   RELAY_HEALTH_REQUEST_TYP,
@@ -38,8 +38,8 @@ import {
   RELAY_MINT_RESPONSE_TYP,
   signRelayJwt,
   verifyRelayJwt,
-} from "@t3tools/shared/relayJwt";
-import { isSecureRelayUrl } from "@t3tools/shared/relayUrl";
+} from "@vipercode/shared/relayJwt";
+import { isSecureRelayUrl } from "@vipercode/shared/relayUrl";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Duration from "effect/Duration";
@@ -105,7 +105,7 @@ const requireRelayUrl = relayUrlConfig.pipe(
   Effect.mapError(
     () =>
       new EnvironmentHttpInternalServerError({
-        message: "T3CODE_RELAY_URL must be configured as a secure absolute HTTPS origin.",
+        message: "VIPERCODE_RELAY_URL must be configured as a secure absolute HTTPS origin.",
       }),
   ),
 );
@@ -374,7 +374,7 @@ const makeCloudLinkProof = Effect.fn("environment.cloud.makeLinkProof")(function
   const nowSeconds = Math.floor(now.epochMilliseconds / 1_000);
   const descriptor = yield* dependencies.environment.getDescriptor;
   const payload = {
-    iss: `t3-env:${descriptor.environmentId}`,
+    iss: `viper-env:${descriptor.environmentId}`,
     aud: normalizeRelayIssuer(request.relayIssuer),
     sub: descriptor.environmentId,
     jti: yield* Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
@@ -509,7 +509,7 @@ const relayClientRequest = <A>(
     Effect.mapError(
       (cause) =>
         new EnvironmentHttpInternalServerError({
-          message: `T3 Connect relay request failed: ${String(cause)}`,
+          message: `Viper Connect relay request failed: ${String(cause)}`,
         }),
     ),
   );
@@ -535,7 +535,7 @@ const reconcileDesiredCloudLinkWith = Effect.fn("environment.cloud.reconcileDesi
           onNone: () =>
             Effect.fail(
               new EnvironmentHttpUnauthorizedError({
-                message: "Run `t3 connect link` to authorize this environment.",
+                message: "Run `viper connect link` to authorize this environment.",
               }),
             ),
           onSome: Effect.succeed,
@@ -595,7 +595,7 @@ const reconcileDesiredCloudLinkWith = Effect.fn("environment.cloud.reconcileDesi
     CloudCliTokenManagerError: (error) =>
       failEnvironmentCloudInternalError(error.message)(error.cause),
     SecretStoreError: failEnvironmentCloudInternalError(
-      "Could not persist desired T3 Connect link state.",
+      "Could not persist desired Viper Connect link state.",
     ),
   }),
 );
@@ -722,7 +722,7 @@ const cloudEnvironmentHealthHandler = Effect.fn("environment.cloud.health")(
       token: request.proof,
       typ: RELAY_HEALTH_REQUEST_TYP,
       issuer: normalizeRelayIssuer(relayIssuer),
-      audience: `t3-env:${environmentId}`,
+      audience: `viper-env:${environmentId}`,
       nowEpochSeconds: nowSeconds,
     }).pipe(Effect.flatMap(decodeCloudHealthProof), Effect.option);
     if (
@@ -755,7 +755,7 @@ const cloudEnvironmentHealthHandler = Effect.fn("environment.cloud.health")(
     const descriptor = yield* dependencies.environment.getDescriptor;
     const responseExpiresAt = DateTime.add(now, { minutes: 5 });
     const responsePayload = {
-      iss: `t3-env:${environmentId}`,
+      iss: `viper-env:${environmentId}`,
       aud: normalizeRelayIssuer(relayIssuer),
       sub: environmentId,
       jti: yield* Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
@@ -839,7 +839,7 @@ const cloudMintCredentialHandler = Effect.fn("environment.cloud.mintCredential")
       token: request.proof,
       typ: RELAY_MINT_REQUEST_TYP,
       issuer: normalizeRelayIssuer(relayIssuer),
-      audience: `t3-env:${environmentId}`,
+      audience: `viper-env:${environmentId}`,
       nowEpochSeconds: nowSeconds,
     }).pipe(Effect.flatMap(decodeCloudMintProof), Effect.option);
     if (
@@ -874,11 +874,11 @@ const cloudMintCredentialHandler = Effect.fn("environment.cloud.mintCredential")
       scopes: AuthStandardClientScopes,
       subject: "cloud-connect",
       ttl: Duration.minutes(2),
-      label: "T3 Connect connect",
+      label: "Viper Connect connect",
       proofKeyThumbprint: proof.clientProofKeyThumbprint,
     });
     const responsePayload = {
-      iss: `t3-env:${environmentId}`,
+      iss: `viper-env:${environmentId}`,
       aud: normalizeRelayIssuer(relayIssuer),
       sub: environmentId,
       jti: yield* Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),

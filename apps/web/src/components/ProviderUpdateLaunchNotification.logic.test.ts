@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@vipercode/contracts";
 
 import {
   canOneClickUpdateProviderCandidate,
@@ -98,7 +98,7 @@ describe("provider update launch notification logic", () => {
           instanceId: instanceId("codex"),
           latestVersion: "1.1.0",
         }),
-        provider({ driver: driver("cursor"), latestVersion: "0.3.0" }),
+        provider({ driver: driver("grok"), latestVersion: "0.3.0" }),
       ]),
     ).toHaveLength(2);
   });
@@ -184,13 +184,13 @@ describe("provider update launch notification logic", () => {
       version: "1.0.0",
       latestVersion: "1.1.0",
     });
-    const cursor = updateCandidate({
-      driver: driver("cursor"),
+    const grok = updateCandidate({
+      driver: driver("grok"),
       version: "0.2.0",
       latestVersion: "0.3.0",
     });
 
-    expect(providerUpdateNotificationKey([codex, cursor])).toBe("codex:1.1.0|cursor:0.3.0");
+    expect(providerUpdateNotificationKey([codex, grok])).toBe("codex:1.1.0|grok:0.3.0");
     expect(providerUpdateNotificationKey([])).toBeNull();
   });
 
@@ -276,12 +276,12 @@ describe("provider update launch notification logic", () => {
     const view = getProviderUpdateInitialToastView({
       updateProviders: [
         updateCandidate({ driver: driver("codex"), canUpdate: false }),
-        updateCandidate({ driver: driver("cursor"), canUpdate: false }),
+        updateCandidate({ driver: driver("grok"), canUpdate: false }),
       ],
       oneClickProviders: [],
     });
 
-    expect(view.description).toBe("Codex and Cursor can be updated from provider settings.");
+    expect(view.description).toBe("Codex and Grok can be updated from provider settings.");
   });
 
   it("uses server update state for running progress", () => {
@@ -359,7 +359,7 @@ describe("provider update launch notification logic", () => {
     const view = getProviderUpdateProgressToastView({
       providers: [
         provider({
-          driver: driver("cursor"),
+          driver: driver("grok"),
           updateState: {
             status: "unchanged",
             startedAt: checkedAt,
@@ -376,7 +376,7 @@ describe("provider update launch notification logic", () => {
       phase: "unchanged",
       type: "warning",
       title: "Provider still needs an update",
-      description: "Cursor still appears outdated. Check provider settings for details.",
+      description: "Grok still appears outdated. Check provider settings for details.",
     });
   });
 
@@ -449,17 +449,17 @@ describe("provider update launch notification logic", () => {
 
   it("collects only attempted provider snapshots from update responses", () => {
     const codex = provider({ driver: driver("codex") });
-    const cursor = provider({ driver: driver("cursor") });
+    const grok = provider({ driver: driver("grok") });
     const results: PromiseSettledResult<{ readonly providers: ReadonlyArray<ServerProvider> }>[] = [
-      { status: "fulfilled", value: { providers: [codex, cursor] } },
+      { status: "fulfilled", value: { providers: [codex, grok] } },
     ];
 
     expect(
       collectUpdatedProviderSnapshots({
         results,
-        providerInstanceIds: new Set([cursor.instanceId]),
+        providerInstanceIds: new Set([grok.instanceId]),
       }),
-    ).toEqual([cursor]);
+    ).toEqual([grok]);
   });
 
   it("summarizes active provider updates for the sidebar pill", () => {
@@ -475,7 +475,7 @@ describe("provider update launch notification logic", () => {
         },
       }),
       provider({
-        driver: driver("cursor"),
+        driver: driver("grok"),
         updateState: {
           status: "queued",
           startedAt: null,
@@ -489,7 +489,7 @@ describe("provider update launch notification logic", () => {
     expect(view).toMatchObject({
       tone: "loading",
       title: "Updating 2 providers",
-      description: "Codex and Cursor updates are in progress.",
+      description: "Codex and Grok updates are in progress.",
     });
   });
 
@@ -574,7 +574,7 @@ describe("provider update launch notification logic", () => {
     const view = getProviderUpdateSidebarPillView(
       [
         provider({
-          driver: driver("cursor"),
+          driver: driver("grok"),
           updateState: {
             status: "unchanged",
             startedAt: checkedAt,
@@ -588,9 +588,9 @@ describe("provider update launch notification logic", () => {
     );
 
     expect(view).toMatchObject({
-      key: "unchanged:cursor:2026-04-23T10:00:00.000Z:still old",
+      key: "unchanged:grok:2026-04-23T10:00:00.000Z:still old",
       tone: "warning",
-      title: "Cursor still needs an update",
+      title: "Grok still needs an update",
       dismissible: true,
     });
   });
@@ -666,7 +666,7 @@ describe("provider update launch notification logic", () => {
     expect(
       getProviderUpdateSidebarPillView([
         provider({ driver: driver("codex"), canUpdate: true }),
-        provider({ driver: driver("cursor"), canUpdate: false }),
+        provider({ driver: driver("grok"), canUpdate: false }),
       ]),
     ).toBeNull();
   });

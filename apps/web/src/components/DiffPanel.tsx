@@ -1,7 +1,7 @@
 import { FileDiff, Virtualizer } from "@pierre/diffs/react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { scopeThreadRef } from "@t3tools/client-runtime";
-import type { TurnId } from "@t3tools/contracts";
+import { scopeThreadRef } from "@vipercode/client-runtime";
+import type { TurnId } from "@vipercode/contracts";
 import {
   ChevronDownIcon,
   ChevronLeftIcon,

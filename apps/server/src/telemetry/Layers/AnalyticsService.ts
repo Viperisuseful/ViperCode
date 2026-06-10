@@ -26,15 +26,15 @@ interface BufferedAnalyticsEvent {
 }
 
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(
-    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
-  ),
-  posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(
+  // No default key: telemetry stays off unless the fork operator provides
+  // their own PostHog project key via env.
+  posthogKey: Config.string("VIPERCODE_POSTHOG_KEY").pipe(Config.withDefault("")),
+  posthogHost: Config.string("VIPERCODE_POSTHOG_HOST").pipe(
     Config.withDefault("https://us.i.posthog.com"),
   ),
-  enabled: Config.boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.withDefault(true)),
-  flushBatchSize: Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
-  maxBufferedEvents: Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
+  enabled: Config.boolean("VIPERCODE_TELEMETRY_ENABLED").pipe(Config.withDefault(false)),
+  flushBatchSize: Config.number("VIPERCODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
+  maxBufferedEvents: Config.number("VIPERCODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
     Config.withDefault(1_000),
   ),
 });
@@ -77,7 +77,7 @@ const makeAnalyticsService = Effect.gen(function* () {
   const sendBatch = Effect.fn("sendBatch")(function* (
     events: ReadonlyArray<BufferedAnalyticsEvent>,
   ) {
-    if (!telemetryConfig.enabled || !identifier) return;
+    if (!telemetryConfig.enabled || telemetryConfig.posthogKey.length === 0 || !identifier) return;
 
     const payload = {
       api_key: telemetryConfig.posthogKey,
@@ -90,7 +90,7 @@ const makeAnalyticsService = Effect.gen(function* () {
           platform: process.platform,
           wsl: process.env.WSL_DISTRO_NAME,
           arch: process.arch,
-          t3CodeVersion: packageJson.version,
+          viperCodeVersion: packageJson.version,
           clientType,
         },
         timestamp: event.capturedAt,
@@ -131,7 +131,7 @@ const makeAnalyticsService = Effect.gen(function* () {
 
   const record: AnalyticsServiceShape["record"] = Effect.fn("record")(
     function* (event, properties) {
-      if (!telemetryConfig.enabled || !identifier) return;
+      if (!telemetryConfig.enabled || telemetryConfig.posthogKey.length === 0 || !identifier) return;
 
       const enqueueResult = yield* enqueueBufferedEvent(event, properties);
       if (enqueueResult.dropped) {

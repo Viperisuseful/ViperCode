@@ -1,11 +1,11 @@
 import {
   DesktopCloudAuthFetchInputSchema,
   DesktopCloudAuthFetchResultSchema,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import {
   clerkFrontendApiHostnameFromPublishableKey,
   isAllowedClerkFrontendApiHostname,
-} from "@t3tools/shared/relayAuth";
+} from "@vipercode/shared/relayAuth";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { identity } from "effect/Function";
@@ -19,7 +19,7 @@ import * as DesktopCloudAuthTokenStore from "../../app/DesktopCloudAuthTokenStor
 import * as IpcChannels from "../channels.ts";
 import { makeIpcMethod } from "../DesktopIpc.ts";
 
-declare const __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: string | undefined;
+declare const __VIPERCODE_BUILD_CLERK_PUBLISHABLE_KEY__: string | undefined;
 
 export class DesktopCloudAuthFetchError extends Data.TaggedError("DesktopCloudAuthFetchError")<{
   readonly reason: string;
@@ -32,10 +32,10 @@ export class DesktopCloudAuthFetchError extends Data.TaggedError("DesktopCloudAu
 
 function configuredClerkFrontendApiHostname(): string | null {
   const publishableKey =
-    process.env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ||
-    (typeof __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__ === "undefined"
+    process.env.VIPERCODE_CLERK_PUBLISHABLE_KEY?.trim() ||
+    (typeof __VIPERCODE_BUILD_CLERK_PUBLISHABLE_KEY__ === "undefined"
       ? ""
-      : __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__.trim());
+      : __VIPERCODE_BUILD_CLERK_PUBLISHABLE_KEY__.trim());
   if (!publishableKey) return null;
 
   return clerkFrontendApiHostnameFromPublishableKey(publishableKey);

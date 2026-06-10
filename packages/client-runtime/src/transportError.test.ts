@@ -19,8 +19,8 @@ describe("isTransportConnectionErrorMessage", () => {
     ).toBe(true);
   });
 
-  it("returns true for the T3 server WebSocket message", () => {
-    expect(isTransportConnectionErrorMessage("Unable to connect to the T3 server WebSocket.")).toBe(
+  it("returns true for the Viper server WebSocket message", () => {
+    expect(isTransportConnectionErrorMessage("Unable to connect to the Viper server WebSocket.")).toBe(
       true,
     );
   });

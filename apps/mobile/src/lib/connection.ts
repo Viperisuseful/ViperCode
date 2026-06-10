@@ -1,9 +1,9 @@
-import { EnvironmentId } from "@t3tools/contracts";
+import { EnvironmentId } from "@vipercode/contracts";
 import {
   bootstrapRemoteBearerSession,
   fetchRemoteEnvironmentDescriptor,
-} from "@t3tools/client-runtime";
-import { resolveRemotePairingTarget, stripPairingTokenFromUrl } from "@t3tools/shared/remote";
+} from "@vipercode/client-runtime";
+import { resolveRemotePairingTarget, stripPairingTokenFromUrl } from "@vipercode/shared/remote";
 import * as Effect from "effect/Effect";
 import { mobileAuthClientMetadata } from "./authClientMetadata";
 import { mobileRuntime } from "./runtime";

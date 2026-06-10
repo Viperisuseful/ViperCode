@@ -1,6 +1,6 @@
-import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
-import { EnvironmentId } from "@t3tools/contracts";
-import { createModelCapabilities } from "@t3tools/shared/model";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@vipercode/contracts";
+import { EnvironmentId } from "@vipercode/contracts";
+import { createModelCapabilities } from "@vipercode/shared/model";
 import { page, userEvent } from "vite-plus/test/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { render } from "vitest-browser-react";
@@ -16,7 +16,7 @@ import {
   DEFAULT_CLIENT_SETTINGS,
   DEFAULT_UNIFIED_SETTINGS,
   type UnifiedSettings,
-} from "@t3tools/contracts/settings";
+} from "@vipercode/contracts/settings";
 import { __resetLocalApiForTests } from "../../localApi";
 
 // Mock the environments/runtime module to provide a mock primary environment connection
@@ -463,7 +463,7 @@ describe("ProviderModelPicker", () => {
 
   it("shows locked provider header and only its models in locked mode", async () => {
     localStorage.setItem(
-      "t3code:client-settings:v1",
+      "vipercode:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         favorites: [
@@ -493,7 +493,7 @@ describe("ProviderModelPicker", () => {
         ]);
       });
     } finally {
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("vipercode:client-settings:v1");
       await mounted.cleanup();
     }
   });
@@ -593,7 +593,6 @@ describe("ProviderModelPicker", () => {
         ],
       ],
       ["codex" as ProviderInstanceId, [{ slug: "gpt-5-codex", name: "GPT-5 Codex" }]],
-      ["cursor" as ProviderInstanceId, []],
       ["opencode" as ProviderInstanceId, []],
     ]);
     const instanceEntries = sortProviderInstanceEntries(
@@ -945,7 +944,7 @@ describe("ProviderModelPicker", () => {
   });
 
   it("toggles favorite stars when clicked", async () => {
-    localStorage.removeItem("t3code:client-settings:v1");
+    localStorage.removeItem("vipercode:client-settings:v1");
 
     const mounted = await mountPicker({
       activeInstanceId: CLAUDE_INSTANCE_ID,
@@ -985,12 +984,12 @@ describe("ProviderModelPicker", () => {
       });
     } finally {
       await mounted.cleanup();
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("vipercode:client-settings:v1");
     }
   });
 
   it("does not duplicate favorited models across favorites and all models sections", async () => {
-    localStorage.removeItem("t3code:client-settings:v1");
+    localStorage.removeItem("vipercode:client-settings:v1");
 
     const mounted = await mountPicker({
       activeInstanceId: CLAUDE_INSTANCE_ID,
@@ -1019,13 +1018,13 @@ describe("ProviderModelPicker", () => {
       });
     } finally {
       await mounted.cleanup();
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("vipercode:client-settings:v1");
     }
   });
 
   it("shows favorited models first within the selected provider list", async () => {
     localStorage.setItem(
-      "t3code:client-settings:v1",
+      "vipercode:client-settings:v1",
       JSON.stringify({
         ...DEFAULT_CLIENT_SETTINGS,
         favorites: [{ provider: "codex", model: "gpt-5.3-codex" }],
@@ -1046,7 +1045,7 @@ describe("ProviderModelPicker", () => {
       });
     } finally {
       await mounted.cleanup();
-      localStorage.removeItem("t3code:client-settings:v1");
+      localStorage.removeItem("vipercode:client-settings:v1");
     }
   });
 

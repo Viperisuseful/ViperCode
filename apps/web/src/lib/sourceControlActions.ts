@@ -7,7 +7,7 @@ import {
   createVcsActionManager,
   getVcsActionTargetKey,
   vcsActionStateAtom,
-} from "@t3tools/client-runtime";
+} from "@vipercode/client-runtime";
 import {
   type EnvironmentId,
   type GitActionProgressEvent,
@@ -19,7 +19,7 @@ import {
   type SourceControlRepositoryVisibility,
   type ThreadId,
   type VcsPullResult,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import {
   useCallback,
   useEffect,

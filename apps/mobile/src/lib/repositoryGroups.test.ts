@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId } from "@vipercode/contracts";
 
 import { groupProjectsByRepository } from "./repositoryGroups";
 import {
   EnvironmentScopedProjectShell,
   EnvironmentScopedThreadShell,
-} from "@t3tools/client-runtime";
+} from "@vipercode/client-runtime";
 
 function makeProject(
   input: Partial<EnvironmentScopedProjectShell> &

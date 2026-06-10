@@ -13,10 +13,10 @@ import {
   type TerminalAttachStreamEvent,
   type TerminalMetadataStreamEvent,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ContextMenuItem } from "@vipercode/contracts";
 
 const showContextMenuFallbackMock =
   vi.fn<
@@ -234,7 +234,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     setTheme: async () => undefined,
     showContextMenu: async () => null,
     openExternal: async () => true,
-    createCloudAuthRequest: async () => "t3code-dev://auth/callback?t3_state=test",
+    createCloudAuthRequest: async () => "vipercode-dev://auth/callback?t3_state=test",
     getCloudAuthToken: async () => null,
     setCloudAuthToken: async () => true,
     clearCloudAuthToken: async () => undefined,
@@ -309,7 +309,7 @@ const baseServerConfig: ServerConfig = {
   keybindings: [],
   issues: [],
   providers: defaultProviders,
-  availableEditors: ["cursor"],
+  availableEditors: ["vscode"],
   observability: {
     logsDirectoryPath: "/tmp/workspace/.config/logs",
     localTracingEnabled: true,

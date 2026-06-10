@@ -4,8 +4,8 @@ import {
   ProviderInstanceId,
   type ServerProvider,
   type ServerProviderUpdateState,
-} from "@t3tools/contracts";
-import { ServerProviderUpdateError } from "@t3tools/contracts";
+} from "@vipercode/contracts";
+import { ServerProviderUpdateError } from "@vipercode/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -28,10 +28,10 @@ import {
 const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
-const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const AGENT_BINARY_DRIVER = ProviderDriverKind.make("agentbinary");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
 const CODEX_INSTANCE_ID = ProviderInstanceId.make("codex");
-const CURSOR_INSTANCE_ID = ProviderInstanceId.make("cursor");
+const AGENT_BINARY_INSTANCE_ID = ProviderInstanceId.make("agentbinary");
 const OPENCODE_INSTANCE_ID = ProviderInstanceId.make("opencode");
 const encoder = new TextEncoder();
 
@@ -40,13 +40,13 @@ afterEach(() => {
 });
 
 function lifecycleFor(provider: ProviderDriverKind): ProviderMaintenanceCapabilities {
-  if (provider === CURSOR_DRIVER) {
+  if (provider === AGENT_BINARY_DRIVER) {
     return makeProviderMaintenanceCapabilities({
       provider,
       packageName: null,
       updateExecutable: "agent",
       updateArgs: ["update"],
-      updateLockKey: "cursor-agent",
+      updateLockKey: "agent-binary",
     });
   }
   return makeProviderMaintenanceCapabilities({
@@ -75,10 +75,10 @@ const baseProvider: ServerProvider = {
   skills: [],
 };
 
-const baseCursorProvider: ServerProvider = {
+const baseAgentBinaryProvider: ServerProvider = {
   ...baseProvider,
-  instanceId: CURSOR_INSTANCE_ID,
-  driver: CURSOR_DRIVER,
+  instanceId: AGENT_BINARY_INSTANCE_ID,
+  driver: AGENT_BINARY_DRIVER,
 };
 
 const baseOpenCodeProvider: ServerProvider = {
@@ -211,10 +211,10 @@ describe("providerMaintenanceRunner", () => {
   it.effect("runs the allowlisted provider update command and records success", () => {
     const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
     return Effect.gen(function* () {
-      const { registry, updateStatesRef } = yield* makeRegistry(baseCursorProvider);
+      const { registry, updateStatesRef } = yield* makeRegistry(baseAgentBinaryProvider);
       const updater = yield* makeTestRunner(registry);
 
-      const result = yield* updater.updateProvider(CURSOR_DRIVER);
+      const result = yield* updater.updateProvider(AGENT_BINARY_DRIVER);
       assert.deepStrictEqual(calls, [
         {
           command: "agent",

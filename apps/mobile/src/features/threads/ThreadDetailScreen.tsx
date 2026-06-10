@@ -8,8 +8,8 @@ import type {
   RuntimeMode,
   ServerConfig as T3ServerConfig,
   ThreadId,
-} from "@t3tools/contracts";
-import { formatElapsed } from "@t3tools/shared/orchestrationTiming";
+} from "@vipercode/contracts";
+import { formatElapsed } from "@vipercode/shared/orchestrationTiming";
 import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";

@@ -1,19 +1,19 @@
-# T3 Connect Clerk Setup
+# Viper Connect Clerk Setup
 
-T3 Connect uses one Clerk application for web, desktop, and mobile authentication. The relay accepts
-Clerk JWTs only when they are generated from the `t3-relay` template with the shared
-`t3-code-relay` audience.
+Viper Connect uses one Clerk application for web, desktop, and mobile authentication. The relay accepts
+Clerk JWTs only when they are generated from the `viper-relay` template with the shared
+`viper-code-relay` audience.
 
 ## Application Keys
 
-T3 Connect is disabled in a fresh clone. To enable it for source builds, add a repository-root `.env`
+Viper Connect is disabled in a fresh clone. To enable it for source builds, add a repository-root `.env`
 or `.env.local` file:
 
 ```dotenv
-T3CODE_CLERK_PUBLISHABLE_KEY=<publishable key>
-T3CODE_CLERK_JWT_TEMPLATE=<JWT template name>
-T3CODE_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
-T3CODE_RELAY_URL=https://relay.example.com
+VIPERCODE_CLERK_PUBLISHABLE_KEY=<publishable key>
+VIPERCODE_CLERK_JWT_TEMPLATE=<JWT template name>
+VIPERCODE_CLERK_CLI_OAUTH_CLIENT_ID=<public OAuth application client ID>
+VIPERCODE_RELAY_URL=https://relay.example.com
 ```
 
 The shared client loader projects these canonical values into framework-specific `VITE_*` and
@@ -30,13 +30,13 @@ The Clerk publishable key, JWT template name, CLI OAuth client ID, and relay URL
 identifiers, not secrets.
 Web, desktop, mobile, and bundled server builds statically inject the values they consume during
 their build step. A built artifact does not need an environment file at runtime. CI release builds
-should set `T3CODE_CLERK_PUBLISHABLE_KEY`, `T3CODE_CLERK_JWT_TEMPLATE`,
-`T3CODE_CLERK_CLI_OAUTH_CLIENT_ID`, and `T3CODE_RELAY_URL` before building. EAS preview and
+should set `VIPERCODE_CLERK_PUBLISHABLE_KEY`, `VIPERCODE_CLERK_JWT_TEMPLATE`,
+`VIPERCODE_CLERK_CLI_OAUTH_CLIENT_ID`, and `VIPERCODE_RELAY_URL` before building. EAS preview and
 production builds only need the Clerk publishable key, JWT template name, and relay URL in their EAS
 environment.
 
 When any client-facing public value is absent, cloud UI is omitted. When the CLI public values are
-absent, the `t3 connect` CLI command group is omitted. The bundled server still accepts runtime
+absent, the `viper connect` CLI command group is omitted. The bundled server still accepts runtime
 overrides for self-hosted or operator-managed
 deployments.
 
@@ -44,7 +44,7 @@ For a hosted relay deployment, copy `infra/relay/.env.example` to `infra/relay/.
 deployment reads `RELAY_DOMAIN`, `RELAY_API_ZONE_NAME`, `RELAY_TUNNEL_ZONE_NAME`,
 `CLERK_PUBLISHABLE_KEY`, and `CLERK_JWT_AUDIENCE` through Effect `Config`. There are no checked-in
 deployment defaults.
-`vp run --filter t3code-relay deploy` invokes Alchemy from the relay directory, so Alchemy loads
+`vp run --filter vipercode-relay deploy` invokes Alchemy from the relay directory, so Alchemy loads
 `infra/relay/.env`. After a successful deployment, the wrapper updates the repository-root `.env`
 with the deployed HTTPS relay URL. The relay still requires
 `CLERK_SECRET_KEY` as an Alchemy secret. Never put `CLERK_SECRET_KEY` in a client application
@@ -56,16 +56,16 @@ personal developer stage.
 
 ## Headless CLI OAuth Application
 
-The `t3 connect` commands authorize a headless environment with a separate Clerk OAuth application.
+The `viper connect` commands authorize a headless environment with a separate Clerk OAuth application.
 This uses an OAuth public client with PKCE, so the CLI stores no client secret.
 
 In **Clerk Dashboard > OAuth applications**:
 
-1. Create an OAuth application for the T3 CLI.
+1. Create an OAuth application for the Viper CLI.
 2. Enable the **Public** option so authorization-code exchange uses PKCE.
 3. Add `http://127.0.0.1:34338/callback` as an allowed redirect URI.
 4. Enable the `openid`, `profile`, and `email` scopes.
-5. Set `T3CODE_CLERK_CLI_OAUTH_CLIENT_ID` in the repository-root `.env` file and release build
+5. Set `VIPERCODE_CLERK_CLI_OAUTH_CLIENT_ID` in the repository-root `.env` file and release build
    environment to the generated public client ID.
 
 The CLI derives Clerk's frontend API URL from the publishable key and calls Clerk's
@@ -75,25 +75,25 @@ handshake; it only validates the issued Clerk bearer token when the CLI manages 
 The CLI supports these headless operations:
 
 ```sh
-t3 connect login
-t3 connect link
-t3 connect status
-t3 connect unlink
-t3 connect logout
-t3 serve
+viper connect login
+viper connect link
+viper connect status
+viper connect unlink
+viper connect logout
+viper serve
 ```
 
-`t3 connect login` opens the Clerk authorization flow and stores the CLI credential without enabling
-cloud exposure. `t3 connect link` installs the pinned managed `cloudflared` binary when needed,
+`viper connect login` opens the Clerk authorization flow and stores the CLI credential without enabling
+cloud exposure. `viper connect link` installs the pinned managed `cloudflared` binary when needed,
 authorizes when needed, and records durable intent to expose the environment. It works without a
-running T3 server. The next `t3 serve` or `t3 start` reconciles the relay link and launches the
-managed tunnel. `t3 connect unlink` records disabled intent immediately, stops a reachable running
+running Viper server. The next `viper serve` or `viper start` reconciles the relay link and launches the
+managed tunnel. `viper connect unlink` records disabled intent immediately, stops a reachable running
 connector, and attempts to revoke the relay-side environment record. It retains the stored CLI
-authorization so `t3 connect link` can re-enable exposure without another browser flow. `t3 connect
+authorization so `viper connect link` can re-enable exposure without another browser flow. `viper connect
 logout` performs the same cleanup and removes the stored CLI authorization.
 
 The current OAuth callback listener binds to loopback port `34338`. When running the CLI over SSH,
-forward that port before running `t3 connect login` or `t3 connect link`:
+forward that port before running `viper connect login` or `viper connect link`:
 
 ```sh
 ssh -L 34338:127.0.0.1:34338 <host>
@@ -108,13 +108,13 @@ In **Clerk Dashboard > JWT templates**, create a template with:
 
 | Setting | Value                        |
 | ------- | ---------------------------- |
-| Name    | `t3-relay`                   |
-| Claims  | `{ "aud": "t3-code-relay" }` |
+| Name    | `viper-relay`                   |
+| Claims  | `{ "aud": "viper-code-relay" }` |
 
-Set `T3CODE_CLERK_JWT_TEMPLATE=t3-relay` in the repository-root `.env`, and set
-`CLERK_JWT_AUDIENCE=t3-code-relay` in `infra/relay/.env`. Define `CLERK_JWT_TEMPLATE` and
+Set `VIPERCODE_CLERK_JWT_TEMPLATE=viper-relay` in the repository-root `.env`, and set
+`CLERK_JWT_AUDIENCE=viper-code-relay` in `infra/relay/.env`. Define `CLERK_JWT_TEMPLATE` and
 `CLERK_JWT_AUDIENCE` in the production relay deployment environment as well. The stable `aud` value
-is shared by production and non-production relay stages. The client-facing `T3CODE_RELAY_URL` still
+is shared by production and non-production relay stages. The client-facing `VIPERCODE_RELAY_URL` still
 selects the concrete relay deployment, but changing that URL does not require a JWT template change.
 
 ## Desktop OAuth Redirect Allowlist
@@ -124,8 +124,8 @@ In **Clerk Dashboard > Native applications**, enable native application support 
 entries under the mobile SSO redirect allowlist:
 
 ```text
-t3code-dev://auth/callback
-t3code://auth/callback
+vipercode-dev://auth/callback
+vipercode://auth/callback
 ```
 
 The first entry is for local desktop development. The second is for packaged desktop builds.
@@ -145,11 +145,11 @@ For a private beta where people should request access, use **Clerk Dashboard > W
 1. Toggle on **Enable waitlist** and save.
 2. Review requests on the same page and select **Invite** or **Deny**.
 
-Approved signed-in users manage T3 Connect under **Connections**. The web and desktop sidebars do
+Approved signed-in users manage Viper Connect under **Connections**. The web and desktop sidebars do
 not expose a dedicated account or waitlist control. Signed-out users reach Clerk's waitlist and
-sign-in flow contextually from the T3 Connect controls on the Connections page.
+sign-in flow contextually from the Viper Connect controls on the Connections page.
 
-On mobile, signed-out users open **Settings > T3 Account** to reach `/settings/waitlist` within the
+On mobile, signed-out users open **Settings > Viper Code Account** to reach `/settings/waitlist` within the
 Settings form sheet. It submits enrollment through Clerk's `useWaitlist()` flow because the prebuilt
 `<Waitlist />` component is web-only in the Expo SDK. Approved users can use **Sign in** from that
 screen.

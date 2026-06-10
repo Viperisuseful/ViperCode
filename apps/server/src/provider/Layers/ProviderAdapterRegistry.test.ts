@@ -2,7 +2,7 @@ import {
   defaultInstanceIdForDriver,
   ProviderDriverKind,
   type ServerProvider,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import { it, assert, vi } from "@effect/vitest";
 
 import * as Effect from "effect/Effect";
@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
-import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
+import type { GrokAdapterShape } from "../Services/GrokAdapter.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
@@ -25,7 +25,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
-const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const GROK_DRIVER = ProviderDriverKind.make("grok");
 
 const fakeCodexAdapter: CodexAdapterShape = {
   provider: CODEX_DRIVER,
@@ -78,8 +78,8 @@ const fakeOpenCodeAdapter: OpenCodeAdapterShape = {
   streamEvents: Stream.empty,
 };
 
-const fakeCursorAdapter: CursorAdapterShape = {
-  provider: CURSOR_DRIVER,
+const fakeGrokAdapter: GrokAdapterShape = {
+  provider: GROK_DRIVER,
   capabilities: { sessionModelSwitch: "in-session" },
   startSession: vi.fn(),
   sendTurn: vi.fn(),
@@ -101,7 +101,7 @@ const fakeCursorAdapter: CursorAdapterShape = {
 // instances whose `instanceId === defaultInstanceIdForDriver(driverKind)` so
 // they pass the default-instance filter.
 const makeFakeInstance = (
-  driverKindString: "codex" | "claudeAgent" | "cursor" | "opencode",
+  driverKindString: "codex" | "claudeAgent" | "grok" | "opencode",
   adapter: ProviderInstance["adapter"],
 ): ProviderInstance => {
   const driverKind = ProviderDriverKind.make(driverKindString);
@@ -132,7 +132,7 @@ const fakeInstances: ReadonlyArray<ProviderInstance> = [
   makeFakeInstance("codex", fakeCodexAdapter),
   makeFakeInstance("claudeAgent", fakeClaudeAdapter),
   makeFakeInstance("opencode", fakeOpenCodeAdapter),
-  makeFakeInstance("cursor", fakeCursorAdapter),
+  makeFakeInstance("grok", fakeGrokAdapter),
 ];
 
 const fakeInstanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
@@ -178,7 +178,7 @@ it.layer(layer)("ProviderAdapterRegistryLive", (it) => {
         defaultInstanceIdForDriver(CODEX_DRIVER),
         claudeInstanceId,
         defaultInstanceIdForDriver(OPENCODE_DRIVER),
-        defaultInstanceIdForDriver(CURSOR_DRIVER),
+        defaultInstanceIdForDriver(GROK_DRIVER),
       ]);
 
       const providers = yield* registry.listProviders();
@@ -186,7 +186,7 @@ it.layer(layer)("ProviderAdapterRegistryLive", (it) => {
         CODEX_DRIVER,
         CLAUDE_AGENT_DRIVER,
         OPENCODE_DRIVER,
-        CURSOR_DRIVER,
+        GROK_DRIVER,
       ]);
     }));
 });

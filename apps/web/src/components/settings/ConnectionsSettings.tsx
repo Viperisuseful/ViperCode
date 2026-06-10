@@ -28,9 +28,9 @@ import {
   type DesktopSshEnvironmentTarget,
   type DesktopServerExposureState,
   type EnvironmentId,
-} from "@t3tools/contracts";
-import { WsRpcClient } from "@t3tools/client-runtime";
-import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
+} from "@vipercode/contracts";
+import { WsRpcClient } from "@vipercode/client-runtime";
+import type { RelayClientEnvironmentRecord } from "@vipercode/contracts/relay";
 import * as DateTime from "effect/DateTime";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
@@ -1616,7 +1616,7 @@ function CloudLinkSwitch({
 }) {
   const control = (
     <Switch
-      aria-label="Enable T3 Connect"
+      aria-label="Enable Viper Connect"
       checked={checked}
       disabled={disabled}
       {...(onCheckedChange ? { onCheckedChange } : {})}
@@ -1647,7 +1647,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       const clerkToken = await getToken(resolveRelayClerkTokenOptions());
       if (enabled) {
         if (!clerkToken) {
-          throw new Error("Sign in to T3 Connect before linking this environment.");
+          throw new Error("Sign in to Viper Connect before linking this environment.");
         }
         await webRuntime.runPromise(linkPrimaryEnvironmentToCloud({ clerkToken }));
       } else {
@@ -1659,18 +1659,18 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       refreshManagedRelayEnvironments();
       toastManager.add({
         type: "success",
-        title: enabled ? "T3 Connect linked" : "T3 Connect unlinked",
+        title: enabled ? "Viper Connect linked" : "Viper Connect unlinked",
         description: enabled
-          ? "This environment is available through T3 Connect."
-          : "This environment is no longer available through T3 Connect.",
+          ? "This environment is available through Viper Connect."
+          : "This environment is no longer available through Viper Connect.",
       });
     } catch (cause) {
       const message =
-        cause instanceof Error ? cause.message : "Could not update T3 Connect access.";
+        cause instanceof Error ? cause.message : "Could not update Viper Connect access.";
       setOperationError(message);
       toastManager.add({
         type: "error",
-        title: "Could not update T3 Connect",
+        title: "Could not update Viper Connect",
         description: message,
       });
     } finally {
@@ -1692,7 +1692,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
     } catch (cause) {
       toastManager.add({
         type: "error",
-        title: "Could not update T3 Connect preferences",
+        title: "Could not update Viper Connect preferences",
         description:
           cause instanceof Error ? cause.message : "Could not update agent activity publishing.",
       });
@@ -1701,20 +1701,20 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
     }
   };
   const disabledReason = !isSignedIn
-    ? "Sign in to T3 Connect"
+    ? "Sign in to Viper Connect"
     : !canManageRelay
-      ? "Your session does not have permission to manage T3 Connect access."
+      ? "Your session does not have permission to manage Viper Connect access."
       : null;
   const linked = primaryCloudLinkState.data?.linked ?? false;
 
   return (
     <>
       <SettingsRow
-        title="T3 Connect"
+        title="Viper Connect"
         description={
           linked
-            ? "This environment is available to your other devices through T3 Connect."
-            : "Make this environment available to your other devices through T3 Connect."
+            ? "This environment is available to your other devices through Viper Connect."
+            : "Make this environment available to your other devices through Viper Connect."
         }
         status={operationError ?? primaryCloudLinkState.error}
         control={
@@ -1788,10 +1788,10 @@ function EmptyRemoteEnvironments({
                   className="border-b border-dotted border-current text-foreground/80 hover:text-foreground"
                   onClick={onConnectFromCloud}
                 >
-                  T3 Connect
+                  Viper Connect
                 </button>
               ) : (
-                "T3 Connect"
+                "Viper Connect"
               )}
             </>
           ) : null}
@@ -1836,7 +1836,7 @@ function ConfiguredCloudRemoteEnvironmentRows({
     try {
       const clerkToken = await getToken(resolveRelayClerkTokenOptions());
       if (!clerkToken) {
-        throw new Error("Sign in to T3 Connect before connecting this environment.");
+        throw new Error("Sign in to Viper Connect before connecting this environment.");
       }
       const connection = await webRuntime.runPromise(
         connectManagedCloudEnvironment({ clerkToken, environment }),
@@ -1845,14 +1845,14 @@ function ConfiguredCloudRemoteEnvironmentRows({
       toastManager.add({
         type: "success",
         title: "Environment connected",
-        description: `${connection.label} is available through T3 Connect.`,
+        description: `${connection.label} is available through Viper Connect.`,
       });
     } catch (cause) {
       toastManager.add({
         type: "error",
         title: "Could not connect environment",
         description:
-          cause instanceof Error ? cause.message : "Could not connect the T3 Connect environment.",
+          cause instanceof Error ? cause.message : "Could not connect the Viper Connect environment.",
       });
     } finally {
       setConnectingEnvironmentId(null);
@@ -1885,11 +1885,11 @@ function ConfiguredCloudRemoteEnvironmentRows({
           <div className="flex items-center gap-2">
             <ConnectionStatusDot
               dotClassName="bg-muted-foreground/35"
-              tooltipText="Available through T3 Connect"
+              tooltipText="Available through Viper Connect"
             />
             <p className="truncate text-sm font-medium">{environment.label}</p>
           </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">T3 Connect</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">Viper Connect</p>
         </div>
         <Button
           size="sm"
@@ -3009,8 +3009,8 @@ export function ConnectionsSettings() {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "T3 Code will restart to expose this environment over the network."
-                    : "T3 Code will restart and limit this environment back to this machine."}
+                    ? "Viper Code will restart to expose this environment over the network."
+                    : "Viper Code will restart and limit this environment back to this machine."}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3054,7 +3054,7 @@ export function ConnectionsSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Disable Tailscale HTTPS?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  T3 Code will restart the local backend without Tailscale Serve.
+                  Viper Code will restart the local backend without Tailscale Serve.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -3092,7 +3092,7 @@ export function ConnectionsSettings() {
               <DialogHeader>
                 <DialogTitle>Set up Tailscale HTTPS?</DialogTitle>
                 <DialogDescription>
-                  T3 Code will restart the local backend with Tailscale Serve enabled and ask
+                  Viper Code will restart the local backend with Tailscale Serve enabled and ask
                   Tailscale to proxy HTTPS traffic to this backend.
                 </DialogDescription>
               </DialogHeader>

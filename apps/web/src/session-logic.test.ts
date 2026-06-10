@@ -4,7 +4,7 @@ import {
   ThreadId,
   TurnId,
   type OrchestrationThreadActivity,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -1039,10 +1039,10 @@ describe("deriveWorkLogEntries", () => {
     });
   });
 
-  it("does not use command stdout as the detail when Cursor omits the command input", () => {
+  it("does not use command stdout as the detail when a provider omits the command input", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
-        id: "cursor-command-complete",
+        id: "acp-command-complete",
         createdAt: "2026-04-16T22:40:42.221Z",
         kind: "tool.completed",
         summary: "Ran command",
@@ -1065,7 +1065,7 @@ describe("deriveWorkLogEntries", () => {
 
     const [entry] = deriveWorkLogEntries(activities, undefined);
     expect(entry).toMatchObject({
-      id: "cursor-command-complete",
+      id: "acp-command-complete",
       label: "Ran command",
       itemType: "command_execution",
       toolTitle: "Ran command",

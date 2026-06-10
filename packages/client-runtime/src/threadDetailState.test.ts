@@ -11,7 +11,7 @@ import {
   TurnId,
   type OrchestrationThread,
   type OrchestrationThreadStreamItem,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 
 import { createThreadDetailManager, type ThreadDetailClient } from "./threadDetailState.ts";
 

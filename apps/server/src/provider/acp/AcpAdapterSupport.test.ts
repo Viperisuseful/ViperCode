@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as EffectAcpErrors from "effect-acp/errors";
-import { ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderDriverKind } from "@vipercode/contracts";
 
 import { acpPermissionOutcome, mapAcpToAdapterError } from "./AcpAdapterSupport.ts";
 
@@ -13,7 +13,7 @@ describe("AcpAdapterSupport", () => {
 
   it("maps ACP request errors to provider adapter request errors", () => {
     const error = mapAcpToAdapterError(
-      ProviderDriverKind.make("cursor"),
+      ProviderDriverKind.make("grok"),
       "thread-1" as never,
       "session/prompt",
       new EffectAcpErrors.AcpRequestError({

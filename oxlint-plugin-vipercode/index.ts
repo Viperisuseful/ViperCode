@@ -5,7 +5,7 @@ import noManualEffectRuntimeInTests from "./rules/no-manual-effect-runtime-in-te
 
 export default definePlugin({
   meta: {
-    name: "t3code",
+    name: "vipercode",
   },
   rules: {
     "no-inline-schema-compile": noInlineSchemaCompile,

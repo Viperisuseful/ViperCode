@@ -9,8 +9,8 @@ import {
   EnvironmentHttpForbiddenError,
   EnvironmentHttpInternalServerError,
   EnvironmentHttpUnauthorizedError,
-} from "@t3tools/contracts";
-import { stripPairingTokenFromUrl } from "@t3tools/shared/remote";
+} from "@vipercode/contracts";
+import { stripPairingTokenFromUrl } from "@vipercode/shared/remote";
 import {
   type RelayEnvironmentConnectResponse as RelayEnvironmentConnectResponseType,
   type RelayEnvironmentLinkResponse as RelayEnvironmentLinkResponseType,
@@ -22,14 +22,14 @@ import {
   type RelayClientEnvironmentRecord,
   type RelayEnvironmentStatusResponse as RelayEnvironmentStatusResponseType,
   type RelayManagedEndpointProviderKind,
-} from "@t3tools/contracts/relay";
+} from "@vipercode/contracts/relay";
 import {
   exchangeRemoteDpopAccessToken,
   fetchRemoteEnvironmentDescriptor,
   makeEnvironmentHttpApiClient,
   ManagedRelayClient,
   ManagedRelayDpopSigner,
-} from "@t3tools/client-runtime";
+} from "@vipercode/client-runtime";
 
 import { mobileAuthClientMetadata } from "../../lib/authClientMetadata";
 import type { SavedRemoteConnection } from "../../lib/connection";

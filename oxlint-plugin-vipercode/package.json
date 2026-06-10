@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/oxlint-plugin-t3code",
+  "name": "@vipercode/oxlint-plugin-vipercode",
   "private": true,
   "type": "module",
   "scripts": {

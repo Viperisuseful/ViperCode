@@ -1,7 +1,7 @@
 import type {
   RelayClientInstallProgressEvent,
   RelayClientInstallProgressStage,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 
 export type RelayClientInstallDialogState =
   | { readonly status: "idle" }

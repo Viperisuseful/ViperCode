@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { VcsProcessSpawnError } from "@t3tools/contracts";
+import { VcsProcessSpawnError } from "@vipercode/contracts";
 
 import { ServerConfig } from "../config.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
@@ -23,7 +23,7 @@ const sourceControlProviderRegistryTestLayer = (input: {
   SourceControlProviderRegistry.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
-        ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-registry-test-" }).pipe(
+        ServerConfig.layerTest(process.cwd(), { prefix: "viper-source-control-registry-test-" }).pipe(
           Layer.provide(NodeServices.layer),
         ),
         Layer.mock(AzureDevOpsCli.AzureDevOpsCli)({}),
@@ -91,7 +91,7 @@ it.effect("reports implemented tools separately from locally available executabl
   } satisfies Partial<VcsProcess.VcsProcessShape>;
   const testLayer = SourceControlDiscovery.layer.pipe(
     Layer.provide(
-      ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-discovery-" }),
+      ServerConfig.layerTest(process.cwd(), { prefix: "viper-source-control-discovery-" }),
     ),
     Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
     Layer.provide(
@@ -103,7 +103,7 @@ it.effect("reports implemented tools separately from locally available executabl
             account: Option.none(),
             host: Option.some("bitbucket.org"),
             detail: Option.some(
-              "Set T3CODE_BITBUCKET_EMAIL and T3CODE_BITBUCKET_API_TOKEN, or T3CODE_BITBUCKET_ACCESS_TOKEN.",
+              "Set VIPERCODE_BITBUCKET_EMAIL and VIPERCODE_BITBUCKET_API_TOKEN, or VIPERCODE_BITBUCKET_ACCESS_TOKEN.",
             ),
           }),
         },
@@ -218,7 +218,7 @@ Logged in to gitlab.com as gitlab-user
   } satisfies Partial<VcsProcess.VcsProcessShape>;
   const testLayer = SourceControlDiscovery.layer.pipe(
     Layer.provide(
-      ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-auth-discovery-" }),
+      ServerConfig.layerTest(process.cwd(), { prefix: "viper-source-control-auth-discovery-" }),
     ),
     Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
     Layer.provide(

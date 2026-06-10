@@ -7,7 +7,7 @@ import {
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 
 import {
   createTerminalSessionManager,

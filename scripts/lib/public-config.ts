@@ -4,7 +4,7 @@ import * as NodePath from "node:path";
 import * as NodeURL from "node:url";
 import * as NodeUtil from "node:util";
 
-export interface T3CodePublicConfig {
+export interface ViperCodePublicConfig {
   readonly clerkPublishableKey: string | undefined;
   readonly clerkJwtTemplate: string | undefined;
   readonly clerkCliOAuthClientId: string | undefined;
@@ -37,79 +37,79 @@ export function loadRepoEnv({
     ...baseEnv,
     ...(config.clerkPublishableKey
       ? {
-          T3CODE_CLERK_PUBLISHABLE_KEY: config.clerkPublishableKey,
+          VIPERCODE_CLERK_PUBLISHABLE_KEY: config.clerkPublishableKey,
           VITE_CLERK_PUBLISHABLE_KEY: config.clerkPublishableKey,
           EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: config.clerkPublishableKey,
         }
       : {}),
     ...(config.clerkJwtTemplate
       ? {
-          T3CODE_CLERK_JWT_TEMPLATE: config.clerkJwtTemplate,
+          VIPERCODE_CLERK_JWT_TEMPLATE: config.clerkJwtTemplate,
           VITE_CLERK_JWT_TEMPLATE: config.clerkJwtTemplate,
           EXPO_PUBLIC_CLERK_JWT_TEMPLATE: config.clerkJwtTemplate,
         }
       : {}),
     ...(config.clerkCliOAuthClientId
       ? {
-          T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
+          VIPERCODE_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
         }
       : {}),
     ...(config.relayUrl
       ? {
-          T3CODE_RELAY_URL: config.relayUrl,
-          VITE_T3CODE_RELAY_URL: config.relayUrl,
+          VIPERCODE_RELAY_URL: config.relayUrl,
+          VITE_VIPERCODE_RELAY_URL: config.relayUrl,
         }
       : {}),
     ...(config.mobileOtlpTracesUrl
       ? {
-          T3CODE_MOBILE_OTLP_TRACES_URL: config.mobileOtlpTracesUrl,
+          VIPERCODE_MOBILE_OTLP_TRACES_URL: config.mobileOtlpTracesUrl,
           EXPO_PUBLIC_OTLP_TRACES_URL: config.mobileOtlpTracesUrl,
         }
       : {}),
     ...(config.mobileOtlpTracesDataset
       ? {
-          T3CODE_MOBILE_OTLP_TRACES_DATASET: config.mobileOtlpTracesDataset,
+          VIPERCODE_MOBILE_OTLP_TRACES_DATASET: config.mobileOtlpTracesDataset,
           EXPO_PUBLIC_OTLP_TRACES_DATASET: config.mobileOtlpTracesDataset,
         }
       : {}),
     ...(config.mobileOtlpTracesToken
       ? {
-          T3CODE_MOBILE_OTLP_TRACES_TOKEN: config.mobileOtlpTracesToken,
+          VIPERCODE_MOBILE_OTLP_TRACES_TOKEN: config.mobileOtlpTracesToken,
           EXPO_PUBLIC_OTLP_TRACES_TOKEN: config.mobileOtlpTracesToken,
         }
       : {}),
   };
 }
 
-export function resolvePublicConfig(...sources: readonly Environment[]): T3CodePublicConfig {
+export function resolvePublicConfig(...sources: readonly Environment[]): ViperCodePublicConfig {
   return {
     clerkPublishableKey: firstNonEmpty(
       sources,
-      "T3CODE_CLERK_PUBLISHABLE_KEY",
+      "VIPERCODE_CLERK_PUBLISHABLE_KEY",
       "VITE_CLERK_PUBLISHABLE_KEY",
       "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY",
     ),
     clerkJwtTemplate: firstNonEmpty(
       sources,
-      "T3CODE_CLERK_JWT_TEMPLATE",
+      "VIPERCODE_CLERK_JWT_TEMPLATE",
       "VITE_CLERK_JWT_TEMPLATE",
       "EXPO_PUBLIC_CLERK_JWT_TEMPLATE",
     ),
-    clerkCliOAuthClientId: firstNonEmpty(sources, "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID"),
-    relayUrl: firstNonEmpty(sources, "T3CODE_RELAY_URL", "VITE_T3CODE_RELAY_URL"),
+    clerkCliOAuthClientId: firstNonEmpty(sources, "VIPERCODE_CLERK_CLI_OAUTH_CLIENT_ID"),
+    relayUrl: firstNonEmpty(sources, "VIPERCODE_RELAY_URL", "VITE_VIPERCODE_RELAY_URL"),
     mobileOtlpTracesUrl: firstNonEmpty(
       sources,
-      "T3CODE_MOBILE_OTLP_TRACES_URL",
+      "VIPERCODE_MOBILE_OTLP_TRACES_URL",
       "EXPO_PUBLIC_OTLP_TRACES_URL",
     ),
     mobileOtlpTracesDataset: firstNonEmpty(
       sources,
-      "T3CODE_MOBILE_OTLP_TRACES_DATASET",
+      "VIPERCODE_MOBILE_OTLP_TRACES_DATASET",
       "EXPO_PUBLIC_OTLP_TRACES_DATASET",
     ),
     mobileOtlpTracesToken: firstNonEmpty(
       sources,
-      "T3CODE_MOBILE_OTLP_TRACES_TOKEN",
+      "VIPERCODE_MOBILE_OTLP_TRACES_TOKEN",
       "EXPO_PUBLIC_OTLP_TRACES_TOKEN",
     ),
   };

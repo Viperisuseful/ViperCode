@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentId } from "@vipercode/contracts";
 import { useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

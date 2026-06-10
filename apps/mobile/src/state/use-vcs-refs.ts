@@ -8,7 +8,7 @@ import {
   createVcsRefManager,
   getVcsRefTargetKey,
   vcsRefStateAtom,
-} from "@t3tools/client-runtime";
+} from "@vipercode/client-runtime";
 
 import { appAtomRegistry } from "./atom-registry";
 import {

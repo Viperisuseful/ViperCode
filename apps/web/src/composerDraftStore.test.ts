@@ -3,7 +3,7 @@ import {
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
-} from "@t3tools/client-runtime";
+} from "@vipercode/client-runtime";
 import * as Schema from "effect/Schema";
 import {
   defaultInstanceIdForDriver,
@@ -14,8 +14,8 @@ import {
   ThreadId,
   type ModelSelection,
   type ProviderOptionSelection,
-} from "@t3tools/contracts";
-import { createModelSelection } from "@t3tools/shared/model";
+} from "@vipercode/contracts";
+import { createModelSelection } from "@vipercode/shared/model";
 
 // The composer draft's `modelSelectionByProvider` and
 // `stickyModelSelectionByProvider` maps are keyed by `ProviderInstanceId`
@@ -23,10 +23,10 @@ import { createModelSelection } from "@t3tools/shared/model";
 const CODEX_INSTANCE = ProviderInstanceId.make("codex");
 const CODEX_SECONDARY_INSTANCE = ProviderInstanceId.make("codex_secondary");
 const CLAUDE_AGENT_INSTANCE = ProviderInstanceId.make("claudeAgent");
-const CURSOR_INSTANCE = ProviderInstanceId.make("cursor");
+const GROK_INSTANCE = ProviderInstanceId.make("grok");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
-const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const GROK_DRIVER = ProviderDriverKind.make("grok");
 
 type ProviderOptionSelectionBag = ReadonlyArray<ProviderOptionSelection>;
 type ProviderOptionSelectionsByProvider = Partial<Record<string, ProviderOptionSelectionBag>>;
@@ -1052,12 +1052,12 @@ describe("composerDraftStore modelSelection", () => {
     );
   });
 
-  it("keeps explicit Cursor reset overrides on the selection", () => {
+  it("keeps explicit Grok reset overrides on the selection", () => {
     const store = useComposerDraftStore.getState();
 
     store.setModelSelection(
       threadRef,
-      modelSelection(CURSOR_DRIVER, "claude-opus-4-6", {
+      modelSelection(GROK_DRIVER, "claude-opus-4-6", {
         reasoning: "xhigh",
         fastMode: true,
         thinking: false,
@@ -1066,14 +1066,14 @@ describe("composerDraftStore modelSelection", () => {
 
     store.setProviderModelOptions(
       threadRef,
-      CURSOR_DRIVER,
+      GROK_DRIVER,
       toSelections({ reasoning: "medium", fastMode: false, thinking: true }),
     );
 
     expect(
-      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CURSOR_INSTANCE],
+      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[GROK_INSTANCE],
     ).toEqual(
-      modelSelection(CURSOR_DRIVER, "claude-opus-4-6", {
+      modelSelection(GROK_DRIVER, "claude-opus-4-6", {
         reasoning: "medium",
         fastMode: false,
         thinking: true,
@@ -1081,25 +1081,25 @@ describe("composerDraftStore modelSelection", () => {
     );
   });
 
-  it("preserves the selected Cursor model when only traits change", () => {
+  it("preserves the selected Grok model when only traits change", () => {
     const store = useComposerDraftStore.getState();
 
-    store.setProviderModelOptions(threadRef, CURSOR_DRIVER, toSelections({ reasoning: "high" }), {
+    store.setProviderModelOptions(threadRef, GROK_DRIVER, toSelections({ reasoning: "high" }), {
       model: "gpt-5.4",
       persistSticky: true,
     });
 
     expect(
-      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CURSOR_INSTANCE],
+      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[GROK_INSTANCE],
     ).toEqual(
-      modelSelection(CURSOR_DRIVER, "gpt-5.4", {
+      modelSelection(GROK_DRIVER, "gpt-5.4", {
         reasoning: "high",
       }),
     );
     expect(
-      useComposerDraftStore.getState().stickyModelSelectionByProvider[CURSOR_INSTANCE],
+      useComposerDraftStore.getState().stickyModelSelectionByProvider[GROK_INSTANCE],
     ).toEqual(
-      modelSelection(CURSOR_DRIVER, "gpt-5.4", {
+      modelSelection(GROK_DRIVER, "gpt-5.4", {
         reasoning: "high",
       }),
     );
@@ -1326,11 +1326,11 @@ describe("composerDraftStore sticky composer settings", () => {
     expect(useComposerDraftStore.getState().stickyActiveProvider).toBe("codex");
   });
 
-  it("drops empty cursor model options when normalizing sticky state", () => {
+  it("drops empty grok model options when normalizing sticky state", () => {
     const store = useComposerDraftStore.getState();
 
     store.setStickyModelSelection(
-      modelSelection(CURSOR_DRIVER, "gpt-5.4", {
+      modelSelection(GROK_DRIVER, "gpt-5.4", {
         reasoning: undefined,
         fastMode: undefined,
         thinking: undefined,
@@ -1339,9 +1339,9 @@ describe("composerDraftStore sticky composer settings", () => {
     );
 
     expect(
-      useComposerDraftStore.getState().stickyModelSelectionByProvider[CURSOR_INSTANCE],
-    ).toEqual(modelSelection(CURSOR_DRIVER, "gpt-5.4"));
-    expect(useComposerDraftStore.getState().stickyActiveProvider).toBe("cursor");
+      useComposerDraftStore.getState().stickyModelSelectionByProvider[GROK_INSTANCE],
+    ).toEqual(modelSelection(GROK_DRIVER, "gpt-5.4"));
+    expect(useComposerDraftStore.getState().stickyActiveProvider).toBe("grok");
   });
 
   it("applies sticky activeProvider to new drafts", () => {

@@ -1,4 +1,4 @@
-import { serializeComposerMentionPath } from "@t3tools/shared/composerTrigger";
+import { serializeComposerMentionPath } from "@vipercode/shared/composerTrigger";
 import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 

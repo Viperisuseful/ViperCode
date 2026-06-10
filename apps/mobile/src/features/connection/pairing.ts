@@ -1,4 +1,4 @@
-import { readHostedPairingRequest } from "@t3tools/shared/remote";
+import { readHostedPairingRequest } from "@vipercode/shared/remote";
 
 const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
 

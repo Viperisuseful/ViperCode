@@ -11,7 +11,7 @@ import {
   type UserInputQuestion,
   type ThreadId,
   type TurnId,
-} from "@t3tools/contracts";
+} from "@vipercode/contracts";
 
 import type {
   ChatMessage,
@@ -36,12 +36,6 @@ export const PROVIDER_OPTIONS: Array<{
   {
     value: ProviderDriverKind.make("opencode"),
     label: "OpenCode",
-    available: true,
-    pickerSidebarBadge: "new",
-  },
-  {
-    value: ProviderDriverKind.make("cursor"),
-    label: "Cursor",
     available: true,
     pickerSidebarBadge: "new",
   },

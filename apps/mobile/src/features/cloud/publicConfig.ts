@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
-import { relayClerkTokenOptions } from "@t3tools/shared/relayAuth";
-import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
+import { relayClerkTokenOptions } from "@vipercode/shared/relayAuth";
+import { normalizeSecureRelayUrl } from "@vipercode/shared/relayUrl";
 
 export interface CloudPublicConfig {
   readonly clerk: {
