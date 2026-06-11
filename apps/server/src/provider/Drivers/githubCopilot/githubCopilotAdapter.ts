@@ -29,6 +29,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
@@ -62,7 +63,6 @@ export const makeGitHubCopilotAdapter = (input: {
   readonly instanceId: ProviderInstanceId;
   readonly auth: GitHubCopilotAuthShape;
   readonly defaultModel: string;
-  readonly apiBaseUrl: string;
 }): Effect.Effect<
   ProviderAdapterShape<ProviderAdapterError>,
   never,
@@ -122,27 +122,23 @@ export const makeGitHubCopilotAdapter = (input: {
           payload: { itemType: "assistant_message", status: "inProgress" },
         });
 
-        const text = yield* input.auth.getSessionToken.pipe(
-          Effect.flatMap((token) =>
+        const completion = yield* input.auth.getSessionToken.pipe(
+          Effect.flatMap((session) =>
             createChatCompletion(
-              token,
+              session.token,
               {
                 model: entry.model,
                 messages: [{ role: "system", content: SYSTEM_PROMPT }, ...entry.history],
                 ...(entry.reasoningEffort ? { reasoning_effort: entry.reasoningEffort } : {}),
               },
-              { apiBaseUrl: input.apiBaseUrl },
+              { apiBaseUrl: session.apiBaseUrl },
             ),
           ),
           Effect.provideService(HttpClient.HttpClient, httpClient),
-          Effect.map(
-            (response) =>
-              response.choices.find((choice) => choice.message?.content)?.message?.content ?? "",
-          ),
-          Effect.orElseSucceed(() => null as string | null),
+          Effect.result,
         );
 
-        if (text === null) {
+        if (Result.isFailure(completion)) {
           yield* publish({
             ...(yield* baseFields(threadId, turnId, yield* nextId)),
             itemId,
@@ -154,11 +150,15 @@ export const makeGitHubCopilotAdapter = (input: {
             type: "turn.completed",
             payload: {
               state: "failed",
-              errorMessage: "GitHub Copilot request failed. Check your sign-in and try again.",
+              errorMessage: `GitHub Copilot request failed: ${completion.failure.message}`,
             },
           });
           return;
         }
+
+        const text =
+          completion.success.choices.find((choice) => choice.message?.content)?.message?.content ??
+          "";
 
         if (text.length > 0) {
           entry.history.push({ role: "assistant", content: text });

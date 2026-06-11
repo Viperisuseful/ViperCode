@@ -4,6 +4,7 @@ import type { CopilotModel } from "./githubCopilotApi.ts";
 import {
   buildCopilotHeaders,
   resolveCopilotApiBaseUrl,
+  resolveGitHubApiBaseUrl,
   resolveGitHubBaseUrl,
 } from "./githubCopilotApi.ts";
 import { mapCopilotModels } from "./githubCopilotProvider.ts";
@@ -124,6 +125,10 @@ describe("GitHub Copilot API helpers", () => {
     expect(resolveCopilotApiBaseUrl("https://github.example.com")).toBe(
       "https://copilot-api.github.example.com",
     );
+    expect(resolveGitHubApiBaseUrl(undefined)).toBe("https://api.github.com");
+    expect(resolveGitHubApiBaseUrl("https://github.example.com")).toBe(
+      "https://api.github.example.com",
+    );
   });
 
   it("builds current Copilot request headers", () => {
@@ -135,8 +140,10 @@ describe("GitHub Copilot API helpers", () => {
       }),
     ).toMatchObject({
       Accept: "application/json",
-      "User-Agent": "ViperCode",
-      "X-GitHub-Api-Version": "2026-06-01",
+      "User-Agent": "GitHubCopilotChat/0.26.7",
+      "Editor-Version": "vscode/1.99.3",
+      "Editor-Plugin-Version": "copilot-chat/0.26.7",
+      "Copilot-Integration-Id": "vscode-chat",
       "Openai-Intent": "conversation-edits",
       "x-initiator": "user",
       "Copilot-Vision-Request": "true",

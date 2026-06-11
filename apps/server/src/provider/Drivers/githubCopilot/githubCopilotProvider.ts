@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import type { CopilotModel, GitHubCopilotApiError } from "./githubCopilotApi.ts";
-import type { GitHubCopilotAuthShape } from "./githubCopilotAuth.ts";
+import type { CopilotSession, GitHubCopilotAuthShape } from "./githubCopilotAuth.ts";
 
 export const GITHUB_COPILOT_DRIVER_KIND = ProviderDriverKind.make("githubCopilot");
 
@@ -172,7 +172,7 @@ export function checkCopilotProviderStatus(input: {
   readonly customModels: ReadonlyArray<string>;
   readonly auth: GitHubCopilotAuthShape;
   readonly fetchModels: (
-    token: string,
+    session: CopilotSession,
   ) => Effect.Effect<ReadonlyArray<CopilotModel>, GitHubCopilotApiError>;
 }): Effect.Effect<ServerProvider> {
   return Effect.gen(function* () {
@@ -212,7 +212,7 @@ export function checkCopilotProviderStatus(input: {
     }
 
     const modelResult = yield* input.auth.getSessionToken.pipe(
-      Effect.flatMap((token) => input.fetchModels(token)),
+      Effect.flatMap((session) => input.fetchModels(session)),
       Effect.result,
     );
 
@@ -222,7 +222,8 @@ export function checkCopilotProviderStatus(input: {
         status: "warning",
         auth: { status: "authenticated", type: "GitHub Copilot" },
         message:
-          "Signed in. Showing default GitHub Copilot models because Viper Code could not refresh the live model catalog.",
+          "Signed in, but the live model catalog could not be refreshed " +
+          `(${modelResult.failure.message}). Showing default GitHub Copilot models.`,
         models: mapCopilotModels([], input.customModels, { includeBuiltIns: true }),
       } satisfies ServerProvider;
     }

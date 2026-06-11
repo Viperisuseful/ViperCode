@@ -26,7 +26,7 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../../ProviderDriver.ts";
-import { fetchCopilotModels, resolveCopilotApiBaseUrl } from "./githubCopilotApi.ts";
+import { fetchCopilotModels } from "./githubCopilotApi.ts";
 import { makeGitHubCopilotAdapter } from "./githubCopilotAdapter.ts";
 import { makeGitHubCopilotAuth } from "./githubCopilotAuth.ts";
 import {
@@ -37,9 +37,12 @@ import {
 import { makeGitHubCopilotTextGeneration } from "./githubCopilotTextGeneration.ts";
 
 const decodeSettings = Schema.decodeSync(GithubCopilotSettings);
-const DEFAULT_MODEL = "gpt-4o";
+const DEFAULT_MODEL = "gpt-5-mini";
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
-const DEFAULT_OAUTH_CLIENT_ID = "Ov23liS4ZtBZjScRq7SW";
+// VS Code's OAuth client id. The copilot_internal/v2/token exchange only
+// honors tokens minted for known Copilot editor apps, so a custom OAuth app
+// here authenticates fine but can never reach the Copilot API.
+const DEFAULT_OAUTH_CLIENT_ID = "Iv1.b507a08c87ecfe98";
 
 export type GitHubCopilotDriverEnv =
   | HttpClient.HttpClient
@@ -65,7 +68,6 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
       const envEnterpriseUrl = process.env.VIPERCODE_GITHUB_ENTERPRISE_URL?.trim() ?? "";
       const oauthClientId = config.oauthClientId.trim() || envClientId || DEFAULT_OAUTH_CLIENT_ID;
       const githubBaseUrl = config.enterpriseUrl.trim() || envEnterpriseUrl || undefined;
-      const apiBaseUrl = resolveCopilotApiBaseUrl(githubBaseUrl);
       const storagePath = path.join(serverConfig.stateDir, "copilot", `${instanceId}.json`);
       const auth = yield* makeGitHubCopilotAuth({
         storagePath,
@@ -76,12 +78,10 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
         instanceId,
         auth,
         defaultModel: DEFAULT_MODEL,
-        apiBaseUrl,
       });
       const textGeneration = yield* makeGitHubCopilotTextGeneration({
         auth,
         model: DEFAULT_MODEL,
-        apiBaseUrl,
       });
 
       const maintenanceCapabilities = makeManualOnlyProviderMaintenanceCapabilities({
@@ -101,8 +101,8 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
           enabled,
           customModels: config.customModels,
           auth,
-          fetchModels: (token) =>
-            fetchCopilotModels(token, { apiBaseUrl }).pipe(
+          fetchModels: (session) =>
+            fetchCopilotModels(session.token, { apiBaseUrl: session.apiBaseUrl }).pipe(
               Effect.provideService(HttpClient.HttpClient, httpClient),
             ),
         }),

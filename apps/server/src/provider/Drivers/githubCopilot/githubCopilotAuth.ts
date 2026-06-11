@@ -23,8 +23,10 @@ import { HttpClient } from "effect/unstable/http";
 
 import {
   type GitHubCopilotApiError,
+  exchangeCopilotSessionToken,
   pollDeviceAccessToken,
   requestDeviceCode,
+  resolveCopilotApiBaseUrl,
   type DeviceCodeResponse,
 } from "./githubCopilotApi.ts";
 
@@ -34,6 +36,12 @@ const decodeStoredOAuthJson = Schema.decodeUnknownEffect(StoredOAuthJson);
 const encodeStoredOAuthJson = Schema.encodeEffect(StoredOAuthJson);
 
 const DEVICE_FLOW_EXPIRY_SAFETY_MS = 5_000;
+// Refresh the Copilot session token this long before its reported expiry so
+// an in-flight completion never races a dying token.
+const SESSION_TOKEN_REFRESH_MARGIN_MS = 120_000;
+// Fallback lifetime when the exchange response omits expires_at (tokens are
+// typically valid ~30 minutes).
+const SESSION_TOKEN_DEFAULT_TTL_MS = 20 * 60_000;
 
 export class GitHubCopilotAuthError extends Schema.TaggedErrorClass<GitHubCopilotAuthError>()(
   "GitHubCopilotAuthError",
@@ -51,6 +59,12 @@ export type DeviceFlowStatus =
   | { readonly _tag: "authenticated" }
   | { readonly _tag: "pending"; readonly userCode: string; readonly verificationUri: string }
   | { readonly _tag: "unavailable"; readonly reason: string };
+
+/** Short-lived credential for api.githubcopilot.com calls. */
+export interface CopilotSession {
+  readonly token: string;
+  readonly apiBaseUrl: string;
+}
 
 export interface GitHubCopilotAuthShape {
   /** Whether a persisted `ghu_` OAuth token exists (i.e. the user is logged in). */
@@ -76,11 +90,12 @@ export interface GitHubCopilotAuthShape {
     device: Pick<DeviceCodeResponse, "device_code" | "interval" | "expires_in">,
   ) => Effect.Effect<string, GitHubCopilotAuthError | GitHubCopilotApiError>;
   /**
-   * Return the persisted GitHub OAuth token used by current Copilot API calls.
-   * Kept as `getSessionToken` to preserve the driver-internal contract while
-   * the implementation moves away from copilot_internal/v2/token.
+   * Return a valid Copilot session token (plus the API base URL the exchange
+   * reported), exchanging the persisted GitHub OAuth token at
+   * copilot_internal/v2/token and caching the result until shortly before it
+   * expires.
    */
-  readonly getSessionToken: Effect.Effect<string, GitHubCopilotAuthError>;
+  readonly getSessionToken: Effect.Effect<CopilotSession, GitHubCopilotAuthError>;
   /** Forget the persisted OAuth token (sign out). */
   readonly signOut: Effect.Effect<void>;
 }
@@ -108,6 +123,12 @@ export const makeGitHubCopilotAuth = (options: {
       readonly verificationUri: string;
       readonly expiresAtMs: number;
     } | null>(null);
+    const sessionRef = yield* Ref.make<{
+      readonly token: string;
+      readonly apiBaseUrl: string;
+      readonly expiresAtMs: number;
+    } | null>(null);
+    const fallbackApiBaseUrl = resolveCopilotApiBaseUrl(options.githubBaseUrl);
 
     // The shape's effects are R=never; provide HttpClient once here so each
     // stateless API call captures it instead of leaking it into the contract.
@@ -132,6 +153,7 @@ export const makeGitHubCopilotAuth = (options: {
           .pipe(Effect.orElseSucceed(() => undefined));
         const encoded = yield* encodeStoredOAuthJson({ oauthToken });
         yield* fs.writeFileString(options.storagePath, encoded);
+        yield* Ref.set(sessionRef, null);
       });
 
     const isAuthenticated = readStoredOAuthToken.pipe(Effect.map((token) => token !== null));
@@ -215,18 +237,45 @@ export const makeGitHubCopilotAuth = (options: {
         return yield* poll(Math.max(device.interval, 1));
       });
 
-    const getSessionToken = Effect.gen(function* () {
-      const oauthToken = yield* readStoredOAuthToken;
-      if (oauthToken === null) {
-        return yield* new GitHubCopilotAuthError({
-          detail: "Not signed in to GitHub Copilot. Run the device authorization flow first.",
-        });
-      }
-      return oauthToken;
-    });
+    const getSessionToken: Effect.Effect<CopilotSession, GitHubCopilotAuthError> = Effect.gen(
+      function* () {
+        const oauthToken = yield* readStoredOAuthToken;
+        if (oauthToken === null) {
+          return yield* new GitHubCopilotAuthError({
+            detail: "Not signed in to GitHub Copilot. Run the device authorization flow first.",
+          });
+        }
+        const cached = yield* Ref.get(sessionRef);
+        const now = yield* Clock.currentTimeMillis;
+        if (cached !== null && now < cached.expiresAtMs) {
+          return { token: cached.token, apiBaseUrl: cached.apiBaseUrl };
+        }
+        const exchanged = yield* withHttp(
+          exchangeCopilotSessionToken(oauthToken, { githubBaseUrl: options.githubBaseUrl }),
+        ).pipe(
+          Effect.mapError(
+            (cause) =>
+              new GitHubCopilotAuthError({
+                detail:
+                  "Could not obtain a GitHub Copilot session token. Make sure your GitHub " +
+                  "account has an active Copilot subscription, then sign out and sign in again.",
+                cause,
+              }),
+          ),
+        );
+        const expiresAtMs =
+          exchanged.expires_at !== undefined
+            ? exchanged.expires_at * 1000 - SESSION_TOKEN_REFRESH_MARGIN_MS
+            : now + SESSION_TOKEN_DEFAULT_TTL_MS;
+        const apiBaseUrl = exchanged.endpoints?.api?.trim() || fallbackApiBaseUrl;
+        yield* Ref.set(sessionRef, { token: exchanged.token, apiBaseUrl, expiresAtMs });
+        return { token: exchanged.token, apiBaseUrl };
+      },
+    );
 
     const signOut = Effect.gen(function* () {
       yield* Ref.set(activeFlowRef, null);
+      yield* Ref.set(sessionRef, null);
       yield* fs.remove(options.storagePath).pipe(Effect.orElseSucceed(() => undefined));
     });
 
