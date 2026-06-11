@@ -3,9 +3,13 @@ import { describe, expect, it } from "vite-plus/test";
 import type { CopilotModel } from "./githubCopilotApi.ts";
 import {
   buildCopilotHeaders,
+  extractMessagesCompletionText,
+  extractResponsesCompletionText,
   resolveCopilotApiBaseUrl,
   resolveGitHubApiBaseUrl,
   resolveGitHubBaseUrl,
+  shouldUseCopilotMessagesApi,
+  shouldUseCopilotResponsesApi,
 } from "./githubCopilotApi.ts";
 import { mapCopilotModels } from "./githubCopilotProvider.ts";
 
@@ -141,6 +145,7 @@ describe("GitHub Copilot API helpers", () => {
     ).toMatchObject({
       Accept: "application/json",
       "User-Agent": "GitHubCopilotChat/0.26.7",
+      "X-GitHub-Api-Version": "2026-06-01",
       "Editor-Version": "vscode/1.99.3",
       "Editor-Plugin-Version": "copilot-chat/0.26.7",
       "Copilot-Integration-Id": "vscode-chat",
@@ -148,5 +153,43 @@ describe("GitHub Copilot API helpers", () => {
       "x-initiator": "user",
       "Copilot-Vision-Request": "true",
     });
+  });
+
+  it("routes Copilot models to the same endpoints as OpenCode", () => {
+    expect(shouldUseCopilotResponsesApi("gpt-5")).toBe(true);
+    expect(shouldUseCopilotResponsesApi("gpt-5.4")).toBe(true);
+    expect(shouldUseCopilotResponsesApi("gpt-5.3-codex")).toBe(true);
+    expect(shouldUseCopilotResponsesApi("gpt-5-mini")).toBe(false);
+    expect(shouldUseCopilotResponsesApi("gpt-5-mini-2025-08-07")).toBe(false);
+    expect(shouldUseCopilotResponsesApi("gpt-4o")).toBe(false);
+
+    expect(shouldUseCopilotMessagesApi("claude-sonnet-4.6")).toBe(true);
+    expect(shouldUseCopilotMessagesApi("github/claude-opus-4.8")).toBe(true);
+    expect(shouldUseCopilotMessagesApi("gemini-3-flash")).toBe(false);
+  });
+
+  it("extracts text from Responses and Messages payloads", () => {
+    expect(
+      extractResponsesCompletionText({
+        output: [
+          {
+            type: "message",
+            content: [
+              { type: "output_text", text: "hello " },
+              { type: "output_text", text: "world" },
+            ],
+          },
+        ],
+      }),
+    ).toBe("hello world");
+    expect(extractResponsesCompletionText({ output_text: "direct" })).toBe("direct");
+    expect(
+      extractMessagesCompletionText({
+        content: [
+          { type: "text", text: "hello " },
+          { type: "text", text: "claude" },
+        ],
+      }),
+    ).toBe("hello claude");
   });
 });

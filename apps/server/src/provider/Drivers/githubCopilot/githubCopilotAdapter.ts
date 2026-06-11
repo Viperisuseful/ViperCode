@@ -39,7 +39,7 @@ import type {
   ProviderAdapterShape,
   ProviderThreadSnapshot,
 } from "../../Services/ProviderAdapter.ts";
-import { createChatCompletion } from "./githubCopilotApi.ts";
+import { createCopilotCompletion } from "./githubCopilotApi.ts";
 import type { GitHubCopilotAuthShape } from "./githubCopilotAuth.ts";
 import { GITHUB_COPILOT_DRIVER_KIND } from "./githubCopilotProvider.ts";
 
@@ -124,12 +124,12 @@ export const makeGitHubCopilotAdapter = (input: {
 
         const completion = yield* input.auth.getSessionToken.pipe(
           Effect.flatMap((session) =>
-            createChatCompletion(
+            createCopilotCompletion(
               session.token,
               {
                 model: entry.model,
                 messages: [{ role: "system", content: SYSTEM_PROMPT }, ...entry.history],
-                ...(entry.reasoningEffort ? { reasoning_effort: entry.reasoningEffort } : {}),
+                reasoningEffort: entry.reasoningEffort,
               },
               { apiBaseUrl: session.apiBaseUrl },
             ),
@@ -156,9 +156,7 @@ export const makeGitHubCopilotAdapter = (input: {
           return;
         }
 
-        const text =
-          completion.success.choices.find((choice) => choice.message?.content)?.message?.content ??
-          "";
+        const text = completion.success.text;
 
         if (text.length > 0) {
           entry.history.push({ role: "assistant", content: text });

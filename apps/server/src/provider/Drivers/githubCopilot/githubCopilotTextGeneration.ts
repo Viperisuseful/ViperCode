@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import { HttpClient } from "effect/unstable/http";
 
 import type { TextGenerationShape } from "../../../textGeneration/TextGeneration.ts";
-import { createChatCompletion } from "./githubCopilotApi.ts";
+import { createCopilotCompletion } from "./githubCopilotApi.ts";
 import type { GitHubCopilotAuthShape } from "./githubCopilotAuth.ts";
 
 type Operation =
@@ -38,7 +38,7 @@ export const makeGitHubCopilotTextGeneration = (input: {
     ): Effect.Effect<string, TextGenerationError> =>
       input.auth.getSessionToken.pipe(
         Effect.flatMap((session) =>
-          createChatCompletion(
+          createCopilotCompletion(
             session.token,
             {
               model: input.model,
@@ -48,11 +48,7 @@ export const makeGitHubCopilotTextGeneration = (input: {
           ),
         ),
         Effect.provideService(HttpClient.HttpClient, httpClient),
-        Effect.map(
-          (response) =>
-            response.choices.find((choice) => choice.message?.content)?.message?.content?.trim() ??
-            "",
-        ),
+        Effect.map((response) => response.text.trim()),
         Effect.mapError(
           () =>
             new TextGenerationError({

@@ -18,6 +18,7 @@ export const DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_c
 export const DEFAULT_GITHUB_BASE_URL = "https://github.com";
 export const DEFAULT_GITHUB_API_BASE = "https://api.github.com";
 export const DEFAULT_COPILOT_API_BASE = "https://api.githubcopilot.com";
+export const COPILOT_API_VERSION = "2026-06-01";
 // The token exchange and the Copilot API both gate on editor identification
 // headers; these mirror the VS Code Copilot Chat extension, the same set
 // OpenCode and other third-party clients send.
@@ -76,6 +77,7 @@ export function buildCopilotHeaders(options?: {
   return {
     Accept: "application/json",
     "User-Agent": options?.userAgent?.trim() || COPILOT_USER_AGENT,
+    "X-GitHub-Api-Version": COPILOT_API_VERSION,
     "Editor-Version": COPILOT_EDITOR_VERSION,
     "Editor-Plugin-Version": COPILOT_EDITOR_PLUGIN_VERSION,
     "Copilot-Integration-Id": COPILOT_INTEGRATION_ID,
@@ -97,21 +99,74 @@ export class GitHubCopilotApiError extends Schema.TaggedErrorClass<GitHubCopilot
   {
     operation: Schema.String,
     cause: Schema.Defect(),
+    detail: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
-    return `GitHub Copilot API request failed during ${this.operation}`;
+    const detail = this.detail ?? errorMessage(this.cause);
+    return `GitHub Copilot API request failed during ${this.operation}${
+      detail ? `: ${detail}` : ""
+    }`;
   }
 }
 
-const mapApiError = (operation: string) =>
-  Effect.mapError(
-    (cause: unknown) =>
-      new GitHubCopilotApiError({
-        operation,
-        cause,
-      }),
+function errorMessage(cause: unknown): string | undefined {
+  if (cause instanceof Error && cause.message.trim().length > 0) return cause.message;
+  if (typeof cause === "object" && cause !== null && "message" in cause) {
+    const message = (cause as { readonly message?: unknown }).message;
+    if (typeof message === "string" && message.trim().length > 0) return message;
+  }
+  return undefined;
+}
+
+function isGitHubCopilotApiError(cause: unknown): cause is GitHubCopilotApiError {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "_tag" in cause &&
+    (cause as { readonly _tag?: unknown })._tag === "GitHubCopilotApiError"
   );
+}
+
+const mapApiError = (operation: string) =>
+  Effect.mapError((cause: unknown) =>
+    isGitHubCopilotApiError(cause)
+      ? cause
+      : new GitHubCopilotApiError({
+          operation,
+          cause,
+        }),
+  );
+
+function compactBody(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
+}
+
+function apiStatusError(
+  operation: string,
+  response: HttpClientResponse.HttpClientResponse,
+  body: string,
+): GitHubCopilotApiError {
+  const compacted = compactBody(body);
+  const detail = `HTTP ${response.status}${compacted.length > 0 ? `: ${compacted}` : ""}`;
+  return new GitHubCopilotApiError({
+    operation,
+    detail,
+    cause: new Error(detail),
+  });
+}
+
+const ensureStatusOk = (
+  operation: string,
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<HttpClientResponse.HttpClientResponse, GitHubCopilotApiError> => {
+  if (response.status >= 200 && response.status < 300) return Effect.succeed(response);
+  return response.text.pipe(
+    Effect.orElseSucceed(() => ""),
+    Effect.flatMap((body) => Effect.fail(apiStatusError(operation, response, body))),
+  );
+};
 
 export const DeviceCodeResponse = Schema.Struct({
   device_code: Schema.String,
@@ -222,6 +277,118 @@ export interface ChatCompletionRequest {
   readonly [key: string]: unknown;
 }
 
+export interface ResponsesCompletionRequest {
+  readonly model: string;
+  readonly input: ReadonlyArray<{ readonly role: string; readonly content: string }> | string;
+  readonly stream?: boolean;
+  readonly store?: boolean;
+  readonly reasoning?: {
+    readonly effort?: string;
+    readonly summary?: string;
+  };
+  readonly [key: string]: unknown;
+}
+
+export interface MessagesCompletionRequest {
+  readonly model: string;
+  readonly messages: ReadonlyArray<{
+    readonly role: "user" | "assistant";
+    readonly content: string;
+  }>;
+  readonly max_tokens: number;
+  readonly system?: string;
+  readonly stream?: boolean;
+  readonly [key: string]: unknown;
+}
+
+export interface CopilotCompletionRequest {
+  readonly model: string;
+  readonly messages: ReadonlyArray<{ readonly role: string; readonly content: string }>;
+  readonly reasoningEffort?: string | undefined;
+}
+
+export interface CopilotCompletionResponse {
+  readonly text: string;
+  readonly endpoint: "chat" | "responses" | "messages";
+}
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null;
+
+export function shouldUseCopilotResponsesApi(model: string): boolean {
+  const normalized = model.toLowerCase();
+  const match = /^gpt-(\d+)/.exec(normalized);
+  return match !== null && Number(match[1]) >= 5 && !normalized.startsWith("gpt-5-mini");
+}
+
+export function shouldUseCopilotMessagesApi(model: string): boolean {
+  const normalized = model.toLowerCase();
+  return normalized.startsWith("claude-") || normalized.includes("/claude-");
+}
+
+export function extractChatCompletionText(response: ChatCompletionResponse): string {
+  return response.choices.find((choice) => choice.message?.content)?.message?.content ?? "";
+}
+
+export function extractResponsesCompletionText(response: unknown): string {
+  if (!isRecord(response)) return "";
+  const direct = response.output_text;
+  if (typeof direct === "string") return direct;
+
+  const chunks: Array<string> = [];
+  const output = response.output;
+  if (!Array.isArray(output)) return "";
+
+  for (const item of output) {
+    if (!isRecord(item)) continue;
+    const itemText = item.text ?? item.output_text;
+    if (typeof itemText === "string") chunks.push(itemText);
+
+    const content = item.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (!isRecord(part)) continue;
+      const partText = part.text ?? part.output_text;
+      if (typeof partText === "string") chunks.push(partText);
+    }
+  }
+
+  return chunks.join("");
+}
+
+export function extractMessagesCompletionText(response: unknown): string {
+  if (!isRecord(response) || !Array.isArray(response.content)) return "";
+  return response.content
+    .map((part) => {
+      if (!isRecord(part)) return "";
+      const text = part.text;
+      return typeof text === "string" ? text : "";
+    })
+    .join("");
+}
+
+function splitSystemMessages(messages: CopilotCompletionRequest["messages"]): {
+  readonly system: string | undefined;
+  readonly messages: ReadonlyArray<{
+    readonly role: "user" | "assistant";
+    readonly content: string;
+  }>;
+} {
+  const system = messages
+    .filter((message) => message.role === "system" && message.content.trim().length > 0)
+    .map((message) => message.content)
+    .join("\n\n");
+  return {
+    system: system.length > 0 ? system : undefined,
+    messages: messages
+      .filter((message) => message.role !== "system")
+      .map((message) => ({
+        role: message.role === "assistant" ? ("assistant" as const) : ("user" as const),
+        content: message.content,
+      })),
+  };
+}
+
 export const requestDeviceCode = (
   options: GitHubCopilotOAuthOptions,
 ): Effect.Effect<DeviceCodeResponse, GitHubCopilotApiError, HttpClient.HttpClient> =>
@@ -238,7 +405,7 @@ export const requestDeviceCode = (
       }),
     );
     const response = yield* httpClient.execute(request);
-    const ok = yield* HttpClientResponse.filterStatusOk(response);
+    const ok = yield* ensureStatusOk("requestDeviceCode", response);
     return yield* HttpClientResponse.schemaBodyJson(DeviceCodeResponse)(ok);
   }).pipe(mapApiError("requestDeviceCode"));
 
@@ -306,7 +473,7 @@ export const exchangeCopilotSessionToken = (
       applyHeaders(buildCopilotHeaders({ userAgent: options?.userAgent })),
     );
     const response = yield* httpClient.execute(request);
-    const ok = yield* HttpClientResponse.filterStatusOk(response);
+    const ok = yield* ensureStatusOk("exchangeCopilotSessionToken", response);
     return yield* HttpClientResponse.schemaBodyJson(CopilotTokenResponse)(ok);
   }).pipe(mapApiError("exchangeCopilotSessionToken"));
 
@@ -323,7 +490,7 @@ export const fetchCopilotModels = (
       applyHeaders(buildCopilotHeaders({ userAgent: options?.userAgent })),
     );
     const response = yield* httpClient.execute(request);
-    const ok = yield* HttpClientResponse.filterStatusOk(response);
+    const ok = yield* ensureStatusOk("fetchCopilotModels", response);
     const body = yield* HttpClientResponse.schemaBodyJson(CopilotModelsResponse)(ok);
     return body.data;
   }).pipe(mapApiError("fetchCopilotModels"));
@@ -346,9 +513,121 @@ export const createChatCompletion = (
           initiator: "user",
         }),
       ),
+      HttpClientRequest.bodyJson({ ...payload, stream: false, store: payload.store ?? false }),
+    );
+    const response = yield* httpClient.execute(request);
+    const ok = yield* ensureStatusOk("createChatCompletion", response);
+    return yield* HttpClientResponse.schemaBodyJson(ChatCompletionResponse)(ok);
+  }).pipe(mapApiError("createChatCompletion"));
+
+export const createResponsesCompletion = (
+  copilotSessionToken: string,
+  payload: ResponsesCompletionRequest,
+  options?: GitHubCopilotApiOptions,
+): Effect.Effect<unknown, GitHubCopilotApiError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient;
+    const request = yield* HttpClientRequest.post(
+      `${options?.apiBaseUrl ?? DEFAULT_COPILOT_API_BASE}/responses`,
+    ).pipe(
+      HttpClientRequest.bearerToken(copilotSessionToken),
+      applyHeaders(
+        buildCopilotHeaders({
+          userAgent: options?.userAgent,
+          intent: "conversation-edits",
+          initiator: "user",
+        }),
+      ),
+      HttpClientRequest.bodyJson({ ...payload, stream: false, store: payload.store ?? false }),
+    );
+    const response = yield* httpClient.execute(request);
+    const ok = yield* ensureStatusOk("createResponsesCompletion", response);
+    return yield* ok.json;
+  }).pipe(mapApiError("createResponsesCompletion"));
+
+export const createMessagesCompletion = (
+  copilotSessionToken: string,
+  payload: MessagesCompletionRequest,
+  options?: GitHubCopilotApiOptions,
+): Effect.Effect<unknown, GitHubCopilotApiError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient;
+    const request = yield* HttpClientRequest.post(
+      `${options?.apiBaseUrl ?? DEFAULT_COPILOT_API_BASE}/v1/messages`,
+    ).pipe(
+      HttpClientRequest.bearerToken(copilotSessionToken),
+      applyHeaders({
+        ...buildCopilotHeaders({
+          userAgent: options?.userAgent,
+          intent: "conversation-edits",
+          initiator: "user",
+        }),
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "interleaved-thinking-2025-05-14",
+      }),
       HttpClientRequest.bodyJson({ ...payload, stream: false }),
     );
     const response = yield* httpClient.execute(request);
-    const ok = yield* HttpClientResponse.filterStatusOk(response);
-    return yield* HttpClientResponse.schemaBodyJson(ChatCompletionResponse)(ok);
-  }).pipe(mapApiError("createChatCompletion"));
+    const ok = yield* ensureStatusOk("createMessagesCompletion", response);
+    return yield* ok.json;
+  }).pipe(mapApiError("createMessagesCompletion"));
+
+export const createCopilotCompletion = (
+  copilotSessionToken: string,
+  payload: CopilotCompletionRequest,
+  options?: GitHubCopilotApiOptions,
+): Effect.Effect<CopilotCompletionResponse, GitHubCopilotApiError, HttpClient.HttpClient> => {
+  if (shouldUseCopilotMessagesApi(payload.model)) {
+    const split = splitSystemMessages(payload.messages);
+    return createMessagesCompletion(
+      copilotSessionToken,
+      {
+        model: payload.model,
+        messages: split.messages,
+        max_tokens: 4096,
+        ...(split.system ? { system: split.system } : {}),
+      },
+      options,
+    ).pipe(
+      Effect.map((response) => ({
+        text: extractMessagesCompletionText(response),
+        endpoint: "messages" as const,
+      })),
+    );
+  }
+
+  if (shouldUseCopilotResponsesApi(payload.model)) {
+    return createResponsesCompletion(
+      copilotSessionToken,
+      {
+        model: payload.model,
+        input: payload.messages,
+        reasoning: {
+          effort: payload.reasoningEffort ?? "medium",
+          summary: "auto",
+        },
+      },
+      options,
+    ).pipe(
+      Effect.map((response) => ({
+        text: extractResponsesCompletionText(response),
+        endpoint: "responses" as const,
+      })),
+    );
+  }
+
+  return createChatCompletion(
+    copilotSessionToken,
+    {
+      model: payload.model,
+      messages: payload.messages,
+      ...(payload.reasoningEffort ? { reasoning_effort: payload.reasoningEffort } : {}),
+    },
+    options,
+  ).pipe(
+    Effect.map((response) => ({
+      text: extractChatCompletionText(response),
+      endpoint: "chat" as const,
+    })),
+  );
+};
