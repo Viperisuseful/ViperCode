@@ -43,6 +43,26 @@ const GITLAB_CHANGE_REQUEST_PRESENTATION: ChangeRequestPresentation = {
   urlExample: "https://gitlab.com/group/project/-/merge_requests/42",
 };
 
+const AZURE_DEVOPS_CHANGE_REQUEST_PRESENTATION: ChangeRequestPresentation = {
+  icon: "change-request",
+  providerName: "Azure DevOps",
+  shortName: "PR",
+  longName: "pull request",
+  pluralLongName: "pull requests",
+  providerLongName: "Azure DevOps pull request",
+  urlExample: "https://dev.azure.com/org/project/_git/repo/pullrequest/42",
+};
+
+const BITBUCKET_CHANGE_REQUEST_PRESENTATION: ChangeRequestPresentation = {
+  icon: "change-request",
+  providerName: "Bitbucket",
+  shortName: "PR",
+  longName: "pull request",
+  pluralLongName: "pull requests",
+  providerLongName: "Bitbucket pull request",
+  urlExample: "https://bitbucket.org/workspace/repo/pull-requests/42",
+};
+
 const GENERIC_CHANGE_REQUEST_PRESENTATION: ChangeRequestPresentation = {
   icon: "change-request",
   providerName: "source control",
@@ -62,6 +82,10 @@ export function resolveChangeRequestPresentation(
       return GITHUB_CHANGE_REQUEST_PRESENTATION;
     case "gitlab":
       return GITLAB_CHANGE_REQUEST_PRESENTATION;
+    case "azure-devops":
+      return AZURE_DEVOPS_CHANGE_REQUEST_PRESENTATION;
+    case "bitbucket":
+      return BITBUCKET_CHANGE_REQUEST_PRESENTATION;
     case "unknown":
       return GENERIC_CHANGE_REQUEST_PRESENTATION;
   }
@@ -150,6 +174,14 @@ function isGitLabHost(host: string): boolean {
   return host === "gitlab.com" || host.includes("gitlab");
 }
 
+function isAzureDevOpsHost(host: string): boolean {
+  return host === "dev.azure.com" || host.endsWith(".visualstudio.com");
+}
+
+function isBitbucketHost(host: string): boolean {
+  return host === "bitbucket.org" || host.includes("bitbucket");
+}
+
 export function detectSourceControlProviderFromRemoteUrl(
   remoteUrl: string,
 ): SourceControlProviderInfo | null {
@@ -171,6 +203,22 @@ export function detectSourceControlProviderFromRemoteUrl(
     return {
       kind: "gitlab",
       name: hostname === "gitlab.com" ? "GitLab" : "GitLab Self-Hosted",
+      baseUrl: toBaseUrl(host),
+    };
+  }
+
+  if (isAzureDevOpsHost(hostname)) {
+    return {
+      kind: "azure-devops",
+      name: "Azure DevOps",
+      baseUrl: toBaseUrl(host),
+    };
+  }
+
+  if (isBitbucketHost(hostname)) {
+    return {
+      kind: "bitbucket",
+      name: hostname === "bitbucket.org" ? "Bitbucket" : "Bitbucket Self-Hosted",
       baseUrl: toBaseUrl(host),
     };
   }

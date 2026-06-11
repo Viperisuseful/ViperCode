@@ -28,17 +28,25 @@ const slugifyBranch = (value: string): string =>
 export const makeGitHubCopilotTextGeneration = (input: {
   readonly auth: GitHubCopilotAuthShape;
   readonly model: string;
+  readonly apiBaseUrl: string;
 }): Effect.Effect<TextGenerationShape, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
 
-    const complete = (operation: Operation, prompt: string): Effect.Effect<string, TextGenerationError> =>
+    const complete = (
+      operation: Operation,
+      prompt: string,
+    ): Effect.Effect<string, TextGenerationError> =>
       input.auth.getSessionToken.pipe(
         Effect.flatMap((token) =>
-          createChatCompletion(token, {
-            model: input.model,
-            messages: [{ role: "user", content: prompt }],
-          }),
+          createChatCompletion(
+            token,
+            {
+              model: input.model,
+              messages: [{ role: "user", content: prompt }],
+            },
+            { apiBaseUrl: input.apiBaseUrl },
+          ),
         ),
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.map(
@@ -46,13 +54,12 @@ export const makeGitHubCopilotTextGeneration = (input: {
             response.choices.find((choice) => choice.message?.content)?.message?.content?.trim() ??
             "",
         ),
-        Effect.catchAll(() =>
-          Effect.fail(
+        Effect.mapError(
+          () =>
             new TextGenerationError({
               operation,
               detail: "GitHub Copilot text generation failed.",
             }),
-          ),
         ),
       );
 

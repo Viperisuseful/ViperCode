@@ -947,12 +947,12 @@ export function ProviderSettingsPanel() {
         )
       : null;
 
-  const refreshProviders = useCallback(() => {
+  const refreshProviders = useCallback((instanceId?: ProviderInstanceId) => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setIsRefreshingProviders(true);
     void ensureLocalApi()
-      .server.refreshProviders()
+      .server.refreshProviders(instanceId === undefined ? undefined : { instanceId })
       .catch((error: unknown) => {
         console.warn("Failed to refresh providers", error);
       })
@@ -1307,6 +1307,7 @@ export function ProviderSettingsPanel() {
                   modelOrder,
                 })
               }
+              onRefreshProvider={refreshProviders}
               onRunUpdate={
                 showInlineUpdateButton && updateCandidate
                   ? () => {

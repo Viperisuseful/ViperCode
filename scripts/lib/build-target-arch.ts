@@ -1,8 +1,8 @@
 export type BuildArch = "arm64" | "x64" | "universal";
 export type BuildPlatform = "mac" | "linux" | "win";
 
-interface PlatformConfig {
-  readonly archChoices: ReadonlyArray<BuildArch>;
+interface PlatformConfig<Arch extends BuildArch = BuildArch> {
+  readonly archChoices: ReadonlyArray<Arch>;
 }
 
 function normalizeWindowsArch(value: string | undefined): BuildArch | undefined {
@@ -33,18 +33,24 @@ export function resolveHostProcessArch(
   return undefined;
 }
 
-export function getDefaultBuildArch(
+export function getDefaultBuildArch<Arch extends BuildArch = BuildArch>(
   platform: BuildPlatform,
   processArch: NodeJS.Architecture,
   env: NodeJS.ProcessEnv,
-  platformConfig: PlatformConfig,
-): BuildArch {
+  platformConfig: PlatformConfig<Arch>,
+): Arch;
+export function getDefaultBuildArch<Arch extends BuildArch = BuildArch>(
+  platform: BuildPlatform,
+  processArch: NodeJS.Architecture,
+  env: NodeJS.ProcessEnv,
+  platformConfig: PlatformConfig<Arch>,
+): Arch {
   const hostPlatform: NodeJS.Platform =
     platform === "win" ? "win32" : platform === "mac" ? "darwin" : "linux";
   const hostArch = resolveHostProcessArch(hostPlatform, processArch, env);
-  if (hostArch && platformConfig.archChoices.includes(hostArch)) {
-    return hostArch;
+  if (hostArch && (platformConfig.archChoices as ReadonlyArray<BuildArch>).includes(hostArch)) {
+    return hostArch as Arch;
   }
 
-  return platformConfig.archChoices[0] ?? "x64";
+  return platformConfig.archChoices[0] ?? ("x64" as Arch);
 }

@@ -1,20 +1,9 @@
 /**
- * githubCopilotApi — stateless HTTP calls + schemas for the GitHub Copilot
- * OAuth device flow, token exchange, model catalog, and chat completions.
+ * githubCopilotApi - stateless HTTP calls and schemas for GitHub Copilot.
  *
- * Pipeline (all functions require only `HttpClient.HttpClient`):
- *   1. {@link requestDeviceCode}      POST github.com/login/device/code
- *   2. {@link pollDeviceAccessToken}  POST github.com/login/oauth/access_token
- *                                     (grant_type=urn:...:device_code) → ghu_ token
- *   3. {@link exchangeCopilotToken}   GET  api.github.com/copilot_internal/v2/token
- *                                     (Authorization: token ghu_…) → session token
- *   4. {@link fetchCopilotModels}     GET  api.githubcopilot.com/models
- *   5. {@link createChatCompletion}   POST api.githubcopilot.com/chat/completions
- *
- * The Copilot entitlement is tied to the OAuth *client id*, not to a GitHub
- * scope — `Iv1.b507a08c87ecfe98` is GitHub's own first-party Copilot client.
- * We request `read:user` (the value GitHub's editors send); the granted
- * Copilot session token comes from the v2/token exchange in step 3.
+ * Current OpenCode authenticates with GitHub's OAuth device flow and then
+ * calls api.githubcopilot.com directly with the GitHub OAuth token. There is
+ * no separate copilot_internal/v2/token exchange in this path.
  *
  * @module provider/Drivers/githubCopilot/githubCopilotApi
  */
@@ -22,30 +11,61 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
-// ── Endpoints + constants ─────────────────────────────────────────────
-
-/** GitHub's first-party Copilot OAuth client id (public, used by every editor). */
-export const COPILOT_CLIENT_ID = "Iv1.b507a08c87ecfe98";
-/** Copilot entitlement rides on the client id; this is the scope editors send. */
 export const COPILOT_OAUTH_SCOPE = "read:user";
-
-export const DEVICE_CODE_URL = "https://github.com/login/device/code";
-export const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
-export const COPILOT_TOKEN_EXCHANGE_URL = "https://api.github.com/copilot_internal/v2/token";
-export const COPILOT_API_BASE = "https://api.githubcopilot.com";
 export const DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+export const DEFAULT_GITHUB_BASE_URL = "https://github.com";
+export const DEFAULT_COPILOT_API_BASE = "https://api.githubcopilot.com";
+export const GITHUB_COPILOT_API_VERSION = "2026-06-01";
+export const COPILOT_USER_AGENT = "ViperCode";
 
-/**
- * Editor-identification headers the Copilot backend expects. The values
- * mirror what the VS Code Copilot Chat extension sends so the API treats us
- * as a supported integration.
- */
-export const COPILOT_EDITOR_HEADERS: Readonly<Record<string, string>> = {
-  "Editor-Version": "vscode/1.96.0",
-  "Editor-Plugin-Version": "copilot-chat/0.23.0",
-  "Copilot-Integration-Id": "vscode-chat",
-  "User-Agent": "GitHubCopilotChat/0.23.0",
-};
+export interface GitHubCopilotOAuthOptions {
+  readonly clientId: string;
+  readonly githubBaseUrl?: string | undefined;
+}
+
+export interface GitHubCopilotApiOptions {
+  readonly apiBaseUrl?: string | undefined;
+  readonly userAgent?: string | undefined;
+}
+
+function parseBaseUrl(value: string | undefined): URL | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme);
+  } catch {
+    return null;
+  }
+}
+
+export function resolveGitHubBaseUrl(githubBaseUrl: string | undefined): string {
+  return parseBaseUrl(githubBaseUrl)?.origin ?? DEFAULT_GITHUB_BASE_URL;
+}
+
+export function resolveCopilotApiBaseUrl(githubBaseUrl: string | undefined): string {
+  const parsed = parseBaseUrl(githubBaseUrl);
+  if (parsed === null || parsed.hostname === "github.com") {
+    return DEFAULT_COPILOT_API_BASE;
+  }
+  return `https://copilot-api.${parsed.host}`;
+}
+
+export function buildCopilotHeaders(options?: {
+  readonly userAgent?: string | undefined;
+  readonly initiator?: "user" | "agent";
+  readonly intent?: "conversation-edits";
+  readonly vision?: boolean;
+}): Readonly<Record<string, string>> {
+  return {
+    Accept: "application/json",
+    "User-Agent": options?.userAgent?.trim() || COPILOT_USER_AGENT,
+    "X-GitHub-Api-Version": GITHUB_COPILOT_API_VERSION,
+    ...(options?.intent ? { "Openai-Intent": options.intent } : {}),
+    ...(options?.initiator ? { "x-initiator": options.initiator } : {}),
+    ...(options?.vision ? { "Copilot-Vision-Request": "true" } : {}),
+  };
+}
 
 const applyHeaders =
   (headers: Readonly<Record<string, string>>) => (request: HttpClientRequest.HttpClientRequest) =>
@@ -54,7 +74,26 @@ const applyHeaders =
       request,
     );
 
-// ── Schemas ───────────────────────────────────────────────────────────
+export class GitHubCopilotApiError extends Schema.TaggedErrorClass<GitHubCopilotApiError>()(
+  "GitHubCopilotApiError",
+  {
+    operation: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `GitHub Copilot API request failed during ${this.operation}`;
+  }
+}
+
+const mapApiError = (operation: string) =>
+  Effect.mapError(
+    (cause: unknown) =>
+      new GitHubCopilotApiError({
+        operation,
+        cause,
+      }),
+  );
 
 export const DeviceCodeResponse = Schema.Struct({
   device_code: Schema.String,
@@ -65,11 +104,6 @@ export const DeviceCodeResponse = Schema.Struct({
 });
 export type DeviceCodeResponse = typeof DeviceCodeResponse.Type;
 
-/**
- * GitHub returns HTTP 200 for both the pending and success states of the
- * device-code poll, distinguished by which fields are present. We decode a
- * permissive union of optionals and branch in {@link pollDeviceAccessToken}.
- */
 export const DeviceAccessTokenResponse = Schema.Struct({
   access_token: Schema.optional(Schema.String),
   token_type: Schema.optional(Schema.String),
@@ -80,19 +114,48 @@ export const DeviceAccessTokenResponse = Schema.Struct({
 });
 export type DeviceAccessTokenResponse = typeof DeviceAccessTokenResponse.Type;
 
-export const CopilotTokenResponse = Schema.Struct({
-  token: Schema.String,
-  /** Unix seconds at which the session token expires. */
-  expires_at: Schema.optional(Schema.Number),
-  /** Seconds after which the client should proactively refresh. */
-  refresh_in: Schema.optional(Schema.Number),
+export const CopilotModelLimits = Schema.Struct({
+  max_context_window_tokens: Schema.optional(Schema.Number),
+  max_output_tokens: Schema.optional(Schema.Number),
+  max_prompt_tokens: Schema.optional(Schema.Number),
+  vision: Schema.optional(Schema.Unknown),
 });
-export type CopilotTokenResponse = typeof CopilotTokenResponse.Type;
+export type CopilotModelLimits = typeof CopilotModelLimits.Type;
+
+export const CopilotModelSupports = Schema.Struct({
+  adaptive_thinking: Schema.optional(Schema.Boolean),
+  max_thinking_budget: Schema.optional(Schema.Number),
+  min_thinking_budget: Schema.optional(Schema.Number),
+  reasoning_effort: Schema.optional(Schema.Array(Schema.String)),
+  streaming: Schema.optional(Schema.Boolean),
+  structured_outputs: Schema.optional(Schema.Boolean),
+  tool_calls: Schema.optional(Schema.Boolean),
+  vision: Schema.optional(Schema.Boolean),
+});
+export type CopilotModelSupports = typeof CopilotModelSupports.Type;
+
+export const CopilotModelCapabilities = Schema.Struct({
+  family: Schema.optional(Schema.String),
+  limits: Schema.optional(CopilotModelLimits),
+  supports: Schema.optional(CopilotModelSupports),
+});
+export type CopilotModelCapabilities = typeof CopilotModelCapabilities.Type;
+
+export const CopilotModelPolicy = Schema.Struct({
+  state: Schema.optional(Schema.String),
+});
+export type CopilotModelPolicy = typeof CopilotModelPolicy.Type;
 
 export const CopilotModel = Schema.Struct({
   id: Schema.String,
   name: Schema.optional(Schema.String),
+  version: Schema.optional(Schema.String),
   vendor: Schema.optional(Schema.String),
+  model_picker_enabled: Schema.optional(Schema.Boolean),
+  supported_endpoints: Schema.optional(Schema.Array(Schema.String)),
+  policy: Schema.optional(CopilotModelPolicy),
+  billing: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  capabilities: Schema.optional(CopilotModelCapabilities),
 });
 export type CopilotModel = typeof CopilotModel.Type;
 
@@ -120,39 +183,34 @@ export const ChatCompletionResponse = Schema.Struct({
 });
 export type ChatCompletionResponse = typeof ChatCompletionResponse.Type;
 
-/** OpenAI-compatible chat completion request payload. */
 export interface ChatCompletionRequest {
   readonly model: string;
   readonly messages: ReadonlyArray<{ readonly role: string; readonly content: string }>;
   readonly temperature?: number;
   readonly stream?: boolean;
+  readonly reasoning_effort?: string;
   readonly [key: string]: unknown;
 }
 
-// ── Step 1: device code ───────────────────────────────────────────────
-
-export const requestDeviceCode: Effect.Effect<
-  DeviceCodeResponse,
-  unknown,
-  HttpClient.HttpClient
-> = Effect.gen(function* () {
-  const httpClient = yield* HttpClient.HttpClient;
-  // GitHub's OAuth endpoints require application/x-www-form-urlencoded; a JSON
-  // body is rejected with HTTP 400.
-  const request = HttpClientRequest.post(DEVICE_CODE_URL).pipe(
-    HttpClientRequest.setHeader("Accept", "application/json"),
-    applyHeaders(COPILOT_EDITOR_HEADERS),
-    HttpClientRequest.bodyUrlParams({
-      client_id: COPILOT_CLIENT_ID,
-      scope: COPILOT_OAUTH_SCOPE,
-    }),
-  );
-  const response = yield* httpClient.execute(request);
-  const ok = yield* HttpClientResponse.filterStatusOk(response);
-  return yield* HttpClientResponse.schemaBodyJson(DeviceCodeResponse)(ok);
-});
-
-// ── Step 2: poll for the ghu_ OAuth token ─────────────────────────────
+export const requestDeviceCode = (
+  options: GitHubCopilotOAuthOptions,
+): Effect.Effect<DeviceCodeResponse, GitHubCopilotApiError, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const httpClient = yield* HttpClient.HttpClient;
+    const request = HttpClientRequest.post(
+      `${resolveGitHubBaseUrl(options.githubBaseUrl)}/login/device/code`,
+    ).pipe(
+      HttpClientRequest.setHeader("Accept", "application/json"),
+      HttpClientRequest.setHeader("User-Agent", COPILOT_USER_AGENT),
+      HttpClientRequest.bodyUrlParams({
+        client_id: options.clientId,
+        scope: COPILOT_OAUTH_SCOPE,
+      }),
+    );
+    const response = yield* httpClient.execute(request);
+    const ok = yield* HttpClientResponse.filterStatusOk(response);
+    return yield* HttpClientResponse.schemaBodyJson(DeviceCodeResponse)(ok);
+  }).pipe(mapApiError("requestDeviceCode"));
 
 export type DevicePollResult =
   | { readonly _tag: "authorized"; readonly accessToken: string }
@@ -162,14 +220,17 @@ export type DevicePollResult =
 
 export const pollDeviceAccessToken = (
   deviceCode: string,
-): Effect.Effect<DevicePollResult, unknown, HttpClient.HttpClient> =>
+  options: GitHubCopilotOAuthOptions,
+): Effect.Effect<DevicePollResult, GitHubCopilotApiError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.post(ACCESS_TOKEN_URL).pipe(
+    const request = HttpClientRequest.post(
+      `${resolveGitHubBaseUrl(options.githubBaseUrl)}/login/oauth/access_token`,
+    ).pipe(
       HttpClientRequest.setHeader("Accept", "application/json"),
-      applyHeaders(COPILOT_EDITOR_HEADERS),
+      HttpClientRequest.setHeader("User-Agent", COPILOT_USER_AGENT),
       HttpClientRequest.bodyUrlParams({
-        client_id: COPILOT_CLIENT_ID,
+        client_id: options.clientId,
         device_code: deviceCode,
         grant_type: DEVICE_CODE_GRANT_TYPE,
       }),
@@ -192,58 +253,47 @@ export const pollDeviceAccessToken = (
           description: body.error_description,
         } as const;
     }
-  });
-
-// ── Step 3: exchange ghu_ token for a Copilot session token ───────────
-
-export const exchangeCopilotToken = (
-  githubOAuthToken: string,
-): Effect.Effect<CopilotTokenResponse, unknown, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const httpClient = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.get(COPILOT_TOKEN_EXCHANGE_URL).pipe(
-      HttpClientRequest.setHeader("Authorization", `token ${githubOAuthToken}`),
-      HttpClientRequest.setHeader("Accept", "application/json"),
-      applyHeaders(COPILOT_EDITOR_HEADERS),
-    );
-    const response = yield* httpClient.execute(request);
-    const ok = yield* HttpClientResponse.filterStatusOk(response);
-    return yield* HttpClientResponse.schemaBodyJson(CopilotTokenResponse)(ok);
-  });
-
-// ── Step 4: model catalog ─────────────────────────────────────────────
+  }).pipe(mapApiError("pollDeviceAccessToken"));
 
 export const fetchCopilotModels = (
-  copilotToken: string,
-): Effect.Effect<ReadonlyArray<CopilotModel>, unknown, HttpClient.HttpClient> =>
+  githubOAuthToken: string,
+  options?: GitHubCopilotApiOptions,
+): Effect.Effect<ReadonlyArray<CopilotModel>, GitHubCopilotApiError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
-    const request = HttpClientRequest.get(`${COPILOT_API_BASE}/models`).pipe(
-      HttpClientRequest.bearerToken(copilotToken),
-      HttpClientRequest.setHeader("Accept", "application/json"),
-      applyHeaders(COPILOT_EDITOR_HEADERS),
+    const request = HttpClientRequest.get(
+      `${options?.apiBaseUrl ?? DEFAULT_COPILOT_API_BASE}/models`,
+    ).pipe(
+      HttpClientRequest.bearerToken(githubOAuthToken),
+      applyHeaders(buildCopilotHeaders({ userAgent: options?.userAgent })),
     );
     const response = yield* httpClient.execute(request);
     const ok = yield* HttpClientResponse.filterStatusOk(response);
     const body = yield* HttpClientResponse.schemaBodyJson(CopilotModelsResponse)(ok);
     return body.data;
-  });
-
-// ── Step 5: chat completion (non-streaming) ───────────────────────────
+  }).pipe(mapApiError("fetchCopilotModels"));
 
 export const createChatCompletion = (
-  copilotToken: string,
+  githubOAuthToken: string,
   payload: ChatCompletionRequest,
-): Effect.Effect<ChatCompletionResponse, unknown, HttpClient.HttpClient> =>
+  options?: GitHubCopilotApiOptions,
+): Effect.Effect<ChatCompletionResponse, GitHubCopilotApiError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
-    const request = yield* HttpClientRequest.post(`${COPILOT_API_BASE}/chat/completions`).pipe(
-      HttpClientRequest.bearerToken(copilotToken),
-      HttpClientRequest.setHeader("Accept", "application/json"),
-      applyHeaders(COPILOT_EDITOR_HEADERS),
+    const request = yield* HttpClientRequest.post(
+      `${options?.apiBaseUrl ?? DEFAULT_COPILOT_API_BASE}/chat/completions`,
+    ).pipe(
+      HttpClientRequest.bearerToken(githubOAuthToken),
+      applyHeaders(
+        buildCopilotHeaders({
+          userAgent: options?.userAgent,
+          intent: "conversation-edits",
+          initiator: "user",
+        }),
+      ),
       HttpClientRequest.bodyJson({ ...payload, stream: false }),
     );
     const response = yield* httpClient.execute(request);
     const ok = yield* HttpClientResponse.filterStatusOk(response);
     return yield* HttpClientResponse.schemaBodyJson(ChatCompletionResponse)(ok);
-  });
+  }).pipe(mapApiError("createChatCompletion"));

@@ -1,11 +1,8 @@
 /**
  * githubCopilotAuth — stateful token manager for the GitHub Copilot driver.
  *
- * Owns the two long-lived credentials:
- *   - the `ghu_` GitHub OAuth token (persisted to disk so login survives
- *     restarts), obtained once via the device flow;
- *   - the short-lived Copilot *session* token (kept in memory, refreshed
- *     from the OAuth token before it expires).
+ * Owns the GitHub OAuth token obtained through the device flow and persists
+ * it to disk so login survives restarts.
  *
  * Built by {@link makeGitHubCopilotAuth} as a per-instance value so two
  * configured Copilot instances never share credentials. Requires
@@ -15,7 +12,9 @@
  */
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Clock from "effect/Clock";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
 import * as FileSystem from "effect/FileSystem";
@@ -23,19 +22,30 @@ import * as Path from "effect/Path";
 import { HttpClient } from "effect/unstable/http";
 
 import {
-  exchangeCopilotToken,
+  type GitHubCopilotApiError,
   pollDeviceAccessToken,
   requestDeviceCode,
   type DeviceCodeResponse,
 } from "./githubCopilotApi.ts";
 
 const StoredOAuth = Schema.Struct({ oauthToken: Schema.String });
-const decodeStoredOAuth = Schema.decodeUnknownEffect(StoredOAuth);
+const StoredOAuthJson = Schema.fromJsonString(StoredOAuth);
+const decodeStoredOAuthJson = Schema.decodeUnknownEffect(StoredOAuthJson);
+const encodeStoredOAuthJson = Schema.encodeEffect(StoredOAuthJson);
 
-/** Refresh the session token this many seconds before it actually expires. */
-const SESSION_TOKEN_REFRESH_SKEW_SECONDS = 60;
-/** Hard cap on device-flow polling, independent of the server-reported expiry. */
-const DEVICE_FLOW_MAX_POLLS = 180;
+const DEVICE_FLOW_EXPIRY_SAFETY_MS = 5_000;
+
+export class GitHubCopilotAuthError extends Schema.TaggedErrorClass<GitHubCopilotAuthError>()(
+  "GitHubCopilotAuthError",
+  {
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 export type DeviceFlowStatus =
   | { readonly _tag: "authenticated" }
@@ -53,32 +63,35 @@ export interface GitHubCopilotAuthShape {
    */
   readonly ensureDeviceFlow: Effect.Effect<DeviceFlowStatus>;
   /** Begin the device flow; the returned code/uri are surfaced in the UI. */
-  readonly startDeviceAuthorization: Effect.Effect<DeviceCodeResponse, unknown>;
+  readonly startDeviceAuthorization: Effect.Effect<
+    DeviceCodeResponse,
+    GitHubCopilotAuthError | GitHubCopilotApiError
+  >;
   /**
    * Poll until the user authorizes in their browser, then persist the
    * resulting `ghu_` token. Resolves with the token, or fails if the device
    * code expires or GitHub returns an error.
    */
   readonly awaitDeviceAuthorization: (
-    device: Pick<DeviceCodeResponse, "device_code" | "interval">,
-  ) => Effect.Effect<string, unknown>;
+    device: Pick<DeviceCodeResponse, "device_code" | "interval" | "expires_in">,
+  ) => Effect.Effect<string, GitHubCopilotAuthError | GitHubCopilotApiError>;
   /**
-   * Return a valid Copilot session token, exchanging/refreshing from the
-   * stored OAuth token as needed. Fails if the user is not authenticated.
+   * Return the persisted GitHub OAuth token used by current Copilot API calls.
+   * Kept as `getSessionToken` to preserve the driver-internal contract while
+   * the implementation moves away from copilot_internal/v2/token.
    */
-  readonly getSessionToken: Effect.Effect<string, unknown>;
-  /** Forget both tokens (sign out). */
+  readonly getSessionToken: Effect.Effect<string, GitHubCopilotAuthError>;
+  /** Forget the persisted OAuth token (sign out). */
   readonly signOut: Effect.Effect<void>;
-}
-
-interface CachedSessionToken {
-  readonly token: string;
-  readonly expiresAtMs: number;
 }
 
 export const makeGitHubCopilotAuth = (options: {
   /** Absolute path to the JSON file holding the persisted `ghu_` token. */
   readonly storagePath: string;
+  /** GitHub OAuth App client id with device flow enabled. */
+  readonly clientId: string;
+  /** Public GitHub by default; GitHub Enterprise URL for enterprise setups. */
+  readonly githubBaseUrl?: string | undefined;
 }): Effect.Effect<
   GitHubCopilotAuthShape,
   never,
@@ -89,11 +102,11 @@ export const makeGitHubCopilotAuth = (options: {
     const path = yield* Path.Path;
     const httpClient = yield* HttpClient.HttpClient;
     const scope = yield* Effect.scope;
-    const sessionRef = yield* Ref.make<CachedSessionToken | null>(null);
+    const clientId = options.clientId.trim();
     const activeFlowRef = yield* Ref.make<{
       readonly userCode: string;
       readonly verificationUri: string;
-      readonly startedAtMs: number;
+      readonly expiresAtMs: number;
     } | null>(null);
 
     // The shape's effects are R=never; provide HttpClient once here so each
@@ -104,15 +117,12 @@ export const makeGitHubCopilotAuth = (options: {
     const readStoredOAuthToken = Effect.gen(function* () {
       const exists = yield* fs.exists(options.storagePath).pipe(Effect.orElseSucceed(() => false));
       if (!exists) return null;
-      const raw = yield* fs.readFileString(options.storagePath).pipe(
-        Effect.orElseSucceed(() => ""),
-      );
+      const raw = yield* fs
+        .readFileString(options.storagePath)
+        .pipe(Effect.orElseSucceed(() => ""));
       if (raw.trim().length === 0) return null;
-      const parsed = yield* Effect.try(() => JSON.parse(raw) as unknown).pipe(
-        Effect.flatMap((value) => decodeStoredOAuth(value)),
-        Effect.option,
-      );
-      return parsed._tag === "Some" ? parsed.value.oauthToken : null;
+      const parsed = yield* decodeStoredOAuthJson(raw).pipe(Effect.result);
+      return Result.isSuccess(parsed) ? parsed.success.oauthToken : null;
     });
 
     const writeStoredOAuthToken = (oauthToken: string) =>
@@ -120,99 +130,134 @@ export const makeGitHubCopilotAuth = (options: {
         yield* fs
           .makeDirectory(path.dirname(options.storagePath), { recursive: true })
           .pipe(Effect.orElseSucceed(() => undefined));
-        yield* fs.writeFileString(options.storagePath, JSON.stringify({ oauthToken }, null, 2));
+        const encoded = yield* encodeStoredOAuthJson({ oauthToken });
+        yield* fs.writeFileString(options.storagePath, encoded);
       });
 
     const isAuthenticated = readStoredOAuthToken.pipe(Effect.map((token) => token !== null));
 
-    const startDeviceAuthorization = withHttp(requestDeviceCode);
+    const missingClientIdReason =
+      "Configure a GitHub OAuth client ID with device flow enabled before signing in.";
+
+    const requireClientId = Effect.suspend(() =>
+      clientId.length > 0
+        ? Effect.succeed(clientId)
+        : Effect.fail(new GitHubCopilotAuthError({ detail: missingClientIdReason })),
+    );
+
+    const startDeviceAuthorization = requireClientId.pipe(
+      Effect.flatMap((validatedClientId) =>
+        withHttp(
+          requestDeviceCode({
+            clientId: validatedClientId,
+            ...(options.githubBaseUrl ? { githubBaseUrl: options.githubBaseUrl } : {}),
+          }),
+        ),
+      ),
+    );
 
     const awaitDeviceAuthorization = (
-      device: Pick<DeviceCodeResponse, "device_code" | "interval">,
-    ): Effect.Effect<string, unknown> => {
-      const poll = (attempt: number, intervalSeconds: number): Effect.Effect<string, unknown> => {
-        if (attempt >= DEVICE_FLOW_MAX_POLLS) {
-          return Effect.fail(new Error("GitHub Copilot device authorization timed out."));
-        }
-        return Effect.sleep(Duration.seconds(intervalSeconds)).pipe(
-          Effect.flatMap(() => withHttp(pollDeviceAccessToken(device.device_code))),
-          Effect.flatMap((result) => {
-            switch (result._tag) {
-              case "authorized":
-                return writeStoredOAuthToken(result.accessToken).pipe(
-                  Effect.as(result.accessToken),
+      device: Pick<DeviceCodeResponse, "device_code" | "interval" | "expires_in">,
+    ): Effect.Effect<string, GitHubCopilotAuthError | GitHubCopilotApiError> =>
+      Effect.gen(function* () {
+        const startedAtMs = yield* Clock.currentTimeMillis;
+        const expiresAtMs =
+          startedAtMs + Math.max(device.expires_in, 1) * 1000 - DEVICE_FLOW_EXPIRY_SAFETY_MS;
+        const poll = (
+          intervalSeconds: number,
+        ): Effect.Effect<string, GitHubCopilotAuthError | GitHubCopilotApiError> =>
+          Effect.sleep(Duration.seconds(intervalSeconds)).pipe(
+            Effect.flatMap(() =>
+              Effect.gen(function* () {
+                const now = yield* Clock.currentTimeMillis;
+                if (now >= expiresAtMs) {
+                  return yield* new GitHubCopilotAuthError({
+                    detail: "GitHub Copilot device authorization expired.",
+                  });
+                }
+                const validatedClientId = yield* requireClientId;
+                return yield* withHttp(
+                  pollDeviceAccessToken(device.device_code, {
+                    clientId: validatedClientId,
+                    ...(options.githubBaseUrl ? { githubBaseUrl: options.githubBaseUrl } : {}),
+                  }),
                 );
-              case "pending":
-                return poll(attempt + 1, intervalSeconds);
-              case "slow_down":
-                return poll(attempt + 1, result.interval);
-              case "error":
-                return Effect.fail(
-                  new Error(
-                    `GitHub Copilot authorization failed: ${result.error}${
-                      result.description ? ` (${result.description})` : ""
-                    }`,
-                  ),
-                );
-            }
-          }),
-        );
-      };
-      return poll(0, Math.max(device.interval, 1));
-    };
-
-    const refreshSessionToken = Effect.gen(function* () {
-      const oauthToken = yield* readStoredOAuthToken;
-      if (oauthToken === null) {
-        return yield* Effect.fail(
-          new Error("Not signed in to GitHub Copilot. Run the device authorization flow first."),
-        );
-      }
-      const exchanged = yield* withHttp(exchangeCopilotToken(oauthToken));
-      const expiresAtMs =
-        (exchanged.expires_at ?? Math.floor(Date.now() / 1000) + 25 * 60) * 1000;
-      const cached: CachedSessionToken = { token: exchanged.token, expiresAtMs };
-      yield* Ref.set(sessionRef, cached);
-      return cached.token;
-    });
+              }),
+            ),
+            Effect.flatMap((result) => {
+              switch (result._tag) {
+                case "authorized":
+                  return writeStoredOAuthToken(result.accessToken).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new GitHubCopilotAuthError({
+                          detail: "Could not persist GitHub Copilot OAuth token.",
+                          cause,
+                        }),
+                    ),
+                    Effect.as(result.accessToken),
+                  );
+                case "pending":
+                  return poll(intervalSeconds);
+                case "slow_down":
+                  return poll(result.interval);
+                case "error":
+                  return Effect.fail(
+                    new GitHubCopilotAuthError({
+                      detail: `GitHub Copilot authorization failed: ${result.error}${
+                        result.description ? ` (${result.description})` : ""
+                      }`,
+                    }),
+                  );
+              }
+            }),
+          );
+        return yield* poll(Math.max(device.interval, 1));
+      });
 
     const getSessionToken = Effect.gen(function* () {
-      const cached = yield* Ref.get(sessionRef);
-      const skewMs = SESSION_TOKEN_REFRESH_SKEW_SECONDS * 1000;
-      if (cached !== null && cached.expiresAtMs - skewMs > Date.now()) {
-        return cached.token;
+      const oauthToken = yield* readStoredOAuthToken;
+      if (oauthToken === null) {
+        return yield* new GitHubCopilotAuthError({
+          detail: "Not signed in to GitHub Copilot. Run the device authorization flow first.",
+        });
       }
-      return yield* refreshSessionToken;
+      return oauthToken;
     });
 
     const signOut = Effect.gen(function* () {
-      yield* Ref.set(sessionRef, null);
       yield* Ref.set(activeFlowRef, null);
       yield* fs.remove(options.storagePath).pipe(Effect.orElseSucceed(() => undefined));
     });
 
-    const DEVICE_CODE_VALID_MS = 14 * 60 * 1000;
     const ensureDeviceFlow: Effect.Effect<DeviceFlowStatus> = Effect.gen(function* () {
       const authed = yield* isAuthenticated;
       if (authed) {
         yield* Ref.set(activeFlowRef, null);
         return { _tag: "authenticated" } as const;
       }
+      if (clientId.length === 0) {
+        return {
+          _tag: "unavailable",
+          reason: missingClientIdReason,
+        } as const;
+      }
       const active = yield* Ref.get(activeFlowRef);
-      if (active !== null && Date.now() - active.startedAtMs < DEVICE_CODE_VALID_MS) {
+      const now = yield* Clock.currentTimeMillis;
+      if (active !== null && now < active.expiresAtMs) {
         return {
           _tag: "pending",
           userCode: active.userCode,
           verificationUri: active.verificationUri,
         } as const;
       }
-      const started = yield* withHttp(requestDeviceCode).pipe(
+      const started = yield* startDeviceAuthorization.pipe(
         Effect.timeout(Duration.seconds(20)),
         Effect.map((device) => ({ ok: true as const, device })),
         Effect.tapError((cause) =>
           Effect.logWarning("GitHub Copilot device-code request failed", { cause }),
         ),
-        Effect.catchAll(() => Effect.succeed({ ok: false as const })),
+        Effect.orElseSucceed(() => ({ ok: false as const })),
       );
       if (!started.ok) {
         return {
@@ -228,13 +273,14 @@ export const makeGitHubCopilotAuth = (options: {
       yield* Ref.set(activeFlowRef, {
         userCode: device.user_code,
         verificationUri: device.verification_uri,
-        startedAtMs: Date.now(),
+        expiresAtMs: now + Math.max(device.expires_in, 1) * 1000 - DEVICE_FLOW_EXPIRY_SAFETY_MS,
       });
       yield* awaitDeviceAuthorization({
         device_code: device.device_code,
         interval: device.interval,
+        expires_in: device.expires_in,
       }).pipe(
-        Effect.catchAll(() => Effect.void),
+        Effect.orElseSucceed(() => undefined),
         Effect.flatMap(() => Ref.set(activeFlowRef, null)),
         Effect.forkIn(scope),
       );

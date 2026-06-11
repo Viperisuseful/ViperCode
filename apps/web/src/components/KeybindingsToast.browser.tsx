@@ -157,14 +157,11 @@ function createBaseServerConfig(): ServerConfig {
           customModels: [],
           launchArgs: "",
         },
-        cursor: { enabled: true, binaryPath: "", apiEndpoint: "", customModels: [] },
-        grok: { enabled: true, binaryPath: "", customModels: [] },
-        opencode: {
+        githubCopilot: {
           enabled: true,
-          binaryPath: "",
-          serverUrl: "",
-          serverPassword: "",
           customModels: [],
+          oauthClientId: "",
+          enterpriseUrl: "",
         },
       },
     },

@@ -23,6 +23,9 @@ import {
   type ProviderSessionStartInput,
   type ProviderTurnStartResult,
 } from "@vipercode/contracts";
+import { getModelSelectionStringOptionValue } from "@vipercode/shared/model";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
@@ -48,6 +51,7 @@ interface CopilotSessionEntry {
   session: ProviderSession;
   history: Array<CopilotChatMessage>;
   model: string;
+  reasoningEffort?: string | undefined;
 }
 
 const SYSTEM_PROMPT =
@@ -58,6 +62,7 @@ export const makeGitHubCopilotAdapter = (input: {
   readonly instanceId: ProviderInstanceId;
   readonly auth: GitHubCopilotAuthShape;
   readonly defaultModel: string;
+  readonly apiBaseUrl: string;
 }): Effect.Effect<
   ProviderAdapterShape<ProviderAdapterError>,
   never,
@@ -71,17 +76,30 @@ export const makeGitHubCopilotAdapter = (input: {
     const counter = yield* Ref.make(0);
 
     const nextId = Ref.modify(counter, (n) => [n + 1, n + 1] as const);
-    // IsoDateTime is a plain string in the contracts; an ISO string is assignable.
-    const nowIso = () => new Date().toISOString();
+    const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-    const baseFields = (threadId: ThreadId, turnId: TurnId, n: number) => ({
-      eventId: EventId.make(`ghcp-${Date.now()}-${n}`),
-      provider: GITHUB_COPILOT_DRIVER_KIND,
-      providerInstanceId: input.instanceId,
-      threadId,
-      createdAt: nowIso(),
-      turnId,
-    });
+    const baseFields = (
+      threadId: ThreadId,
+      turnId: TurnId,
+      n: number,
+    ): Effect.Effect<
+      Pick<
+        ProviderRuntimeEvent,
+        "eventId" | "provider" | "providerInstanceId" | "threadId" | "createdAt" | "turnId"
+      >
+    > =>
+      Effect.gen(function* () {
+        const nowMs = yield* Clock.currentTimeMillis;
+        const createdAt = yield* nowIso;
+        return {
+          eventId: EventId.make(`ghcp-${nowMs}-${n}`),
+          provider: GITHUB_COPILOT_DRIVER_KIND,
+          providerInstanceId: input.instanceId,
+          threadId,
+          createdAt,
+          turnId,
+        };
+      });
 
     const publish = (event: ProviderRuntimeEvent) =>
       PubSub.publish(events, event).pipe(Effect.asVoid);
@@ -89,15 +107,16 @@ export const makeGitHubCopilotAdapter = (input: {
     const runCompletion = (threadId: ThreadId, turnId: TurnId, entry: CopilotSessionEntry) =>
       Effect.gen(function* () {
         const itemSeq = yield* nextId;
-        const itemId = RuntimeItemId.make(`ghcp-item-${Date.now()}-${itemSeq}`);
+        const itemTimestamp = yield* Clock.currentTimeMillis;
+        const itemId = RuntimeItemId.make(`ghcp-item-${itemTimestamp}-${itemSeq}`);
 
         yield* publish({
-          ...baseFields(threadId, turnId, yield* nextId),
+          ...(yield* baseFields(threadId, turnId, yield* nextId)),
           type: "turn.started",
           payload: { model: entry.model },
         });
         yield* publish({
-          ...baseFields(threadId, turnId, yield* nextId),
+          ...(yield* baseFields(threadId, turnId, yield* nextId)),
           itemId,
           type: "item.started",
           payload: { itemType: "assistant_message", status: "inProgress" },
@@ -105,28 +124,33 @@ export const makeGitHubCopilotAdapter = (input: {
 
         const text = yield* input.auth.getSessionToken.pipe(
           Effect.flatMap((token) =>
-            createChatCompletion(token, {
-              model: entry.model,
-              messages: [{ role: "system", content: SYSTEM_PROMPT }, ...entry.history],
-            }),
+            createChatCompletion(
+              token,
+              {
+                model: entry.model,
+                messages: [{ role: "system", content: SYSTEM_PROMPT }, ...entry.history],
+                ...(entry.reasoningEffort ? { reasoning_effort: entry.reasoningEffort } : {}),
+              },
+              { apiBaseUrl: input.apiBaseUrl },
+            ),
           ),
           Effect.provideService(HttpClient.HttpClient, httpClient),
           Effect.map(
             (response) =>
               response.choices.find((choice) => choice.message?.content)?.message?.content ?? "",
           ),
-          Effect.catchAll(() => Effect.succeed<string | null>(null)),
+          Effect.orElseSucceed(() => null as string | null),
         );
 
         if (text === null) {
           yield* publish({
-            ...baseFields(threadId, turnId, yield* nextId),
+            ...(yield* baseFields(threadId, turnId, yield* nextId)),
             itemId,
             type: "item.completed",
             payload: { itemType: "assistant_message", status: "failed" },
           });
           yield* publish({
-            ...baseFields(threadId, turnId, yield* nextId),
+            ...(yield* baseFields(threadId, turnId, yield* nextId)),
             type: "turn.completed",
             payload: {
               state: "failed",
@@ -139,30 +163,37 @@ export const makeGitHubCopilotAdapter = (input: {
         if (text.length > 0) {
           entry.history.push({ role: "assistant", content: text });
           yield* publish({
-            ...baseFields(threadId, turnId, yield* nextId),
+            ...(yield* baseFields(threadId, turnId, yield* nextId)),
             itemId,
             type: "content.delta",
             payload: { streamKind: "assistant_text", delta: text },
           });
         }
         yield* publish({
-          ...baseFields(threadId, turnId, yield* nextId),
+          ...(yield* baseFields(threadId, turnId, yield* nextId)),
           itemId,
           type: "item.completed",
           payload: { itemType: "assistant_message", status: "completed" },
         });
         yield* publish({
-          ...baseFields(threadId, turnId, yield* nextId),
+          ...(yield* baseFields(threadId, turnId, yield* nextId)),
           type: "turn.completed",
           payload: { state: "completed" },
         });
       });
 
-    const startSession = (
-      startInput: ProviderSessionStartInput,
-    ): Effect.Effect<ProviderSession> =>
+    const startSession = (startInput: ProviderSessionStartInput): Effect.Effect<ProviderSession> =>
       Effect.gen(function* () {
-        const model = startInput.modelSelection?.model ?? input.defaultModel;
+        const modelSelection =
+          startInput.modelSelection?.instanceId === input.instanceId
+            ? startInput.modelSelection
+            : undefined;
+        const model = modelSelection?.model ?? input.defaultModel;
+        const reasoningEffort = getModelSelectionStringOptionValue(
+          modelSelection,
+          "reasoningEffort",
+        );
+        const createdAt = yield* nowIso;
         const session: ProviderSession = {
           provider: GITHUB_COPILOT_DRIVER_KIND,
           providerInstanceId: input.instanceId,
@@ -170,30 +201,37 @@ export const makeGitHubCopilotAdapter = (input: {
           runtimeMode: startInput.runtimeMode,
           threadId: startInput.threadId,
           model,
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
+          createdAt,
+          updatedAt: createdAt,
         };
         yield* Ref.update(sessions, (map) => {
           const next = new Map(map);
-          next.set(startInput.threadId, { session, history: [], model });
+          next.set(startInput.threadId, { session, history: [], model, reasoningEffort });
           return next;
         });
         return session;
       });
 
-    const sendTurn = (
-      turnInput: ProviderSendTurnInput,
-    ): Effect.Effect<ProviderTurnStartResult> =>
+    const sendTurn = (turnInput: ProviderSendTurnInput): Effect.Effect<ProviderTurnStartResult> =>
       Effect.gen(function* () {
         const map = yield* Ref.get(sessions);
         const entry = map.get(turnInput.threadId);
         const seq = yield* nextId;
-        const turnId = TurnId.make(`ghcp-turn-${Date.now()}-${seq}`);
+        const turnTimestamp = yield* Clock.currentTimeMillis;
+        const turnId = TurnId.make(`ghcp-turn-${turnTimestamp}-${seq}`);
         if (entry === undefined) {
           return { threadId: turnInput.threadId, turnId };
         }
-        if (turnInput.modelSelection?.model) {
-          entry.model = turnInput.modelSelection.model;
+        const modelSelection =
+          turnInput.modelSelection?.instanceId === input.instanceId
+            ? turnInput.modelSelection
+            : undefined;
+        if (modelSelection?.model) {
+          entry.model = modelSelection.model;
+          entry.reasoningEffort = getModelSelectionStringOptionValue(
+            modelSelection,
+            "reasoningEffort",
+          );
         }
         if (turnInput.input && turnInput.input.trim().length > 0) {
           entry.history.push({ role: "user", content: turnInput.input });
@@ -203,7 +241,9 @@ export const makeGitHubCopilotAdapter = (input: {
       });
 
     const listSessions = (): Effect.Effect<ReadonlyArray<ProviderSession>> =>
-      Ref.get(sessions).pipe(Effect.map((map) => Array.from(map.values(), (entry) => entry.session)));
+      Ref.get(sessions).pipe(
+        Effect.map((map) => Array.from(map.values(), (entry) => entry.session)),
+      );
 
     const hasSession = (threadId: ThreadId): Effect.Effect<boolean> =>
       Ref.get(sessions).pipe(Effect.map((map) => map.has(threadId)));

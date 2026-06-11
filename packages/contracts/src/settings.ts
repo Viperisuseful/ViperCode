@@ -263,9 +263,32 @@ export const GithubCopilotSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
+    oauthClientId: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "OAuth client ID",
+        description:
+          "GitHub OAuth App client ID with device flow enabled. Can also be provided with VIPERCODE_GITHUB_COPILOT_CLIENT_ID.",
+        providerSettingsForm: {
+          placeholder: "GitHub OAuth client ID",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    enterpriseUrl: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "GitHub Enterprise URL",
+        description: "Optional. Leave empty for github.com.",
+        providerSettingsForm: {
+          placeholder: "https://github.company.com",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
   },
   {
-    order: [],
+    order: ["oauthClientId", "enterpriseUrl"],
   },
 );
 export type GithubCopilotSettings = typeof GithubCopilotSettings.Type;
@@ -363,6 +386,8 @@ const CodexSettingsPatch = Schema.Struct({
 const GithubCopilotSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  oauthClientId: Schema.optionalKey(TrimmedString),
+  enterpriseUrl: Schema.optionalKey(TrimmedString),
 });
 
 const ClaudeSettingsPatch = Schema.Struct({

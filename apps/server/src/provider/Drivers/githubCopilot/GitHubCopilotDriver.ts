@@ -26,7 +26,7 @@ import {
   type ProviderDriver,
   type ProviderInstance,
 } from "../../ProviderDriver.ts";
-import { fetchCopilotModels } from "./githubCopilotApi.ts";
+import { fetchCopilotModels, resolveCopilotApiBaseUrl } from "./githubCopilotApi.ts";
 import { makeGitHubCopilotAdapter } from "./githubCopilotAdapter.ts";
 import { makeGitHubCopilotAuth } from "./githubCopilotAuth.ts";
 import {
@@ -39,6 +39,7 @@ import { makeGitHubCopilotTextGeneration } from "./githubCopilotTextGeneration.t
 const decodeSettings = Schema.decodeSync(GithubCopilotSettings);
 const DEFAULT_MODEL = "gpt-4o";
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
+const DEFAULT_OAUTH_CLIENT_ID = "Ov23liS4ZtBZjScRq7SW";
 
 export type GitHubCopilotDriverEnv =
   | HttpClient.HttpClient
@@ -60,10 +61,28 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
       const path = yield* Path.Path;
       const serverConfig = yield* ServerConfig;
 
+      const envClientId = process.env.VIPERCODE_GITHUB_COPILOT_CLIENT_ID?.trim() ?? "";
+      const envEnterpriseUrl = process.env.VIPERCODE_GITHUB_ENTERPRISE_URL?.trim() ?? "";
+      const oauthClientId = config.oauthClientId.trim() || envClientId || DEFAULT_OAUTH_CLIENT_ID;
+      const githubBaseUrl = config.enterpriseUrl.trim() || envEnterpriseUrl || undefined;
+      const apiBaseUrl = resolveCopilotApiBaseUrl(githubBaseUrl);
       const storagePath = path.join(serverConfig.stateDir, "copilot", `${instanceId}.json`);
-      const auth = yield* makeGitHubCopilotAuth({ storagePath });
-      const adapter = yield* makeGitHubCopilotAdapter({ instanceId, auth, defaultModel: DEFAULT_MODEL });
-      const textGeneration = yield* makeGitHubCopilotTextGeneration({ auth, model: DEFAULT_MODEL });
+      const auth = yield* makeGitHubCopilotAuth({
+        storagePath,
+        clientId: oauthClientId,
+        githubBaseUrl,
+      });
+      const adapter = yield* makeGitHubCopilotAdapter({
+        instanceId,
+        auth,
+        defaultModel: DEFAULT_MODEL,
+        apiBaseUrl,
+      });
+      const textGeneration = yield* makeGitHubCopilotTextGeneration({
+        auth,
+        model: DEFAULT_MODEL,
+        apiBaseUrl,
+      });
 
       const maintenanceCapabilities = makeManualOnlyProviderMaintenanceCapabilities({
         provider: GITHUB_COPILOT_DRIVER_KIND,
@@ -83,7 +102,9 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
           customModels: config.customModels,
           auth,
           fetchModels: (token) =>
-            fetchCopilotModels(token).pipe(Effect.provideService(HttpClient.HttpClient, httpClient)),
+            fetchCopilotModels(token, { apiBaseUrl }).pipe(
+              Effect.provideService(HttpClient.HttpClient, httpClient),
+            ),
         }),
         refreshInterval: SNAPSHOT_REFRESH_INTERVAL,
       }).pipe(

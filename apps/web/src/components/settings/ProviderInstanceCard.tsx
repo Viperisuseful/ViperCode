@@ -421,6 +421,7 @@ interface ProviderInstanceCardProps {
   readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
+  readonly onRefreshProvider?: ((instanceId: ProviderInstanceId) => void) | undefined;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
 }
@@ -465,6 +466,7 @@ export function ProviderInstanceCard({
   onHiddenModelsChange,
   onFavoriteModelsChange,
   onModelOrderChange,
+  onRefreshProvider,
   onRunUpdate,
   isUpdating = false,
 }: ProviderInstanceCardProps) {
@@ -677,6 +679,17 @@ export function ProviderInstanceCard({
   // user to authorize. Render a button that opens an in-app pop-up with a
   // clickable browser link and the code.
   const deviceAuth = liveProvider?.deviceAuth;
+  const shouldPollDeviceAuth =
+    deviceAuth !== undefined &&
+    liveProvider?.auth.status !== "authenticated" &&
+    onRefreshProvider !== undefined;
+
+  useEffect(() => {
+    if (!shouldPollDeviceAuth) return;
+    const intervalId = window.setInterval(() => onRefreshProvider?.(instanceId), 3_000);
+    return () => window.clearInterval(intervalId);
+  }, [instanceId, onRefreshProvider, shouldPollDeviceAuth]);
+
   const deviceAuthNode =
     deviceAuth && liveProvider?.auth.status !== "authenticated" ? (
       <Popover>
@@ -704,7 +717,11 @@ export function ProviderInstanceCard({
                 variant="default"
                 className="w-full"
                 onClick={() => {
-                  void window.desktopBridge?.openExternal(deviceAuth.verificationUri);
+                  if (window.desktopBridge) {
+                    void window.desktopBridge.openExternal(deviceAuth.verificationUri);
+                    return;
+                  }
+                  window.open(deviceAuth.verificationUri, "_blank", "noopener,noreferrer");
                 }}
               >
                 Open {deviceAuth.verificationUri.replace(/^https?:\/\//, "")}
