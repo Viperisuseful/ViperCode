@@ -70,6 +70,14 @@ export interface GitHubCopilotAuthShape {
   /** Whether a persisted `ghu_` OAuth token exists (i.e. the user is logged in). */
   readonly isAuthenticated: Effect.Effect<boolean>;
   /**
+   * The persisted GitHub `ghu_` OAuth token, or `null` when signed out. Unlike
+   * {@link getSessionToken} this is the raw OAuth token — the credential the
+   * GitHub Copilot CLI accepts via `COPILOT_GITHUB_TOKEN`, which it exchanges
+   * for a session token itself. (The api.githubcopilot.com session token is
+   * not a GitHub OAuth token and would be rejected there.)
+   */
+  readonly getOAuthToken: Effect.Effect<string | null>;
+  /**
    * Drive sign-in without a dedicated UI: if already authenticated, report
    * so; otherwise start (or resume) the device flow and report the code to
    * surface in the provider card. The browser-authorization poll runs in the
@@ -342,6 +350,7 @@ export const makeGitHubCopilotAuth = (options: {
 
     return {
       isAuthenticated,
+      getOAuthToken: readStoredOAuthToken,
       ensureDeviceFlow,
       startDeviceAuthorization,
       awaitDeviceAuthorization,

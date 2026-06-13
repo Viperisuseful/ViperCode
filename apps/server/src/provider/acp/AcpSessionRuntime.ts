@@ -46,7 +46,13 @@ export interface AcpSessionRuntimeOptions {
     readonly name: string;
     readonly version: string;
   };
-  readonly authMethodId: string;
+  /**
+   * Preferred ACP auth method id. Authentication is only attempted when the
+   * agent advertises `authMethods` in its `initialize` response; agents that
+   * authenticate out-of-band (e.g. the GitHub Copilot CLI, which reads a token
+   * from the environment or its own login) advertise none and are left alone.
+   */
+  readonly authMethodId?: string | undefined;
   readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   readonly protocolLogging?: {
     readonly logIncoming?: boolean;
@@ -139,7 +145,7 @@ interface EnsureActiveAssistantSegmentResult {
 }
 
 export class AcpSessionRuntime extends Context.Service<AcpSessionRuntime, AcpSessionRuntimeShape>()(
-  "viper/provider/acp/AcpSessionRuntime",
+  "vipercode/provider/acp/AcpSessionRuntime",
 ) {
   static layer(
     options: AcpSessionRuntimeOptions,
@@ -381,15 +387,28 @@ const makeAcpSessionRuntime = (
         acp.agent.initialize(initializePayload),
       );
 
-      const authenticatePayload = {
-        methodId: options.authMethodId,
-      } satisfies EffectAcpSchema.AuthenticateRequest;
+      // Authenticate only when the caller named an auth method the agent
+      // advertises. Agents authenticated out-of-band (e.g. the GitHub Copilot
+      // CLI via an env token or a prior `copilot login`) still advertise
+      // interactive auth methods, so authenticating unconditionally would
+      // wrongly trigger a login handshake even though `session/new` already
+      // works. Callers leave `authMethodId` unset to skip this step.
+      if (options.authMethodId) {
+        const advertised = (initializeResult.authMethods ?? []).some(
+          (method) => method.id === options.authMethodId,
+        );
+        if (advertised) {
+          const authenticatePayload = {
+            methodId: options.authMethodId,
+          } satisfies EffectAcpSchema.AuthenticateRequest;
 
-      yield* runLoggedRequest(
-        "authenticate",
-        authenticatePayload,
-        acp.agent.authenticate(authenticatePayload),
-      );
+          yield* runLoggedRequest(
+            "authenticate",
+            authenticatePayload,
+            acp.agent.authenticate(authenticatePayload),
+          );
+        }
+      }
 
       let sessionId: string;
       let sessionSetupResult:

@@ -246,9 +246,9 @@ export const ClaudeSettings = makeProviderSettingsSchema(
 );
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
-// GitHub Copilot authenticates through the OAuth device flow (no binary or
-// path config). The session token is acquired and refreshed by the server;
-// only display-level options live here.
+// GitHub Copilot authenticates through the OAuth device flow; the stored token
+// is reused by the Copilot CLI for agentic sessions. `cliPath` points at the
+// `copilot` binary spawned in ACP mode.
 export const GithubCopilotSettings = makeProviderSettingsSchema(
   {
     // Enabled like Codex/Claude: an enabled-but-unauthenticated provider
@@ -262,6 +262,13 @@ export const GithubCopilotSettings = makeProviderSettingsSchema(
     customModels: Schema.Array(Schema.String).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    cliPath: makeBinaryPathSetting("copilot").pipe(
+      Schema.annotateKey({
+        title: "CLI path",
+        description: "Path to the GitHub Copilot CLI binary spawned for agentic sessions.",
+        providerSettingsForm: { placeholder: "copilot", clearWhenEmpty: "omit" },
+      }),
     ),
     oauthClientId: TrimmedString.pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
@@ -288,7 +295,7 @@ export const GithubCopilotSettings = makeProviderSettingsSchema(
     ),
   },
   {
-    order: ["oauthClientId", "enterpriseUrl"],
+    order: ["cliPath", "oauthClientId", "enterpriseUrl"],
   },
 );
 export type GithubCopilotSettings = typeof GithubCopilotSettings.Type;
@@ -386,6 +393,7 @@ const CodexSettingsPatch = Schema.Struct({
 const GithubCopilotSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  cliPath: Schema.optionalKey(TrimmedString),
   oauthClientId: Schema.optionalKey(TrimmedString),
   enterpriseUrl: Schema.optionalKey(TrimmedString),
 });

@@ -16,6 +16,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
+import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { ServerConfig } from "../../../config.ts";
 import { ProviderDriverError } from "../../Errors.ts";
@@ -27,7 +28,7 @@ import {
   type ProviderInstance,
 } from "../../ProviderDriver.ts";
 import { fetchCopilotModels } from "./githubCopilotApi.ts";
-import { makeGitHubCopilotAdapter } from "./githubCopilotAdapter.ts";
+import { makeGitHubCopilotCliAdapter } from "./githubCopilotCliAdapter.ts";
 import { makeGitHubCopilotAuth } from "./githubCopilotAuth.ts";
 import {
   checkCopilotProviderStatus,
@@ -45,6 +46,7 @@ const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
 const DEFAULT_OAUTH_CLIENT_ID = "Iv1.b507a08c87ecfe98";
 
 export type GitHubCopilotDriverEnv =
+  | ChildProcessSpawner.ChildProcessSpawner
   | HttpClient.HttpClient
   | FileSystem.FileSystem
   | Path.Path
@@ -68,15 +70,18 @@ export const GitHubCopilotDriver: ProviderDriver<GithubCopilotSettings, GitHubCo
       const envEnterpriseUrl = process.env.VIPERCODE_GITHUB_ENTERPRISE_URL?.trim() ?? "";
       const oauthClientId = config.oauthClientId.trim() || envClientId || DEFAULT_OAUTH_CLIENT_ID;
       const githubBaseUrl = config.enterpriseUrl.trim() || envEnterpriseUrl || undefined;
+      // `cliPath` decodes to "copilot" when unset (makeBinaryPathSetting).
+      const cliPath = config.cliPath.trim() || "copilot";
       const storagePath = path.join(serverConfig.stateDir, "copilot", `${instanceId}.json`);
       const auth = yield* makeGitHubCopilotAuth({
         storagePath,
         clientId: oauthClientId,
         githubBaseUrl,
       });
-      const adapter = yield* makeGitHubCopilotAdapter({
+      const adapter = yield* makeGitHubCopilotCliAdapter({
         instanceId,
         auth,
+        cliPath,
         defaultModel: DEFAULT_MODEL,
       });
       const textGeneration = yield* makeGitHubCopilotTextGeneration({
