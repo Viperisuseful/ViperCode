@@ -18,11 +18,22 @@
  * @module provider/Drivers/githubCopilot/githubCopilotCliModels
  */
 import type { ServerProviderModel } from "@vipercode/contracts";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 /** Sentinel model id used to trigger the CLI's "Allowed choices are …" error. */
 const PROBE_MODEL_SENTINEL = "__vipercode_model_probe__";
+
+/**
+ * Hard cap on the probe spawn. The "invalid --model exits immediately" trick
+ * relies on a CLI that validates and exits; some Copilot CLI builds instead
+ * keep `--acp` open as a persistent ACP stdio server and never exit, which
+ * would hang server startup (the provider snapshot is awaited before the HTTP
+ * server reports ready). The timeout interrupts the spawn and falls back to
+ * {@link DEFAULT_COPILOT_CLI_MODELS} so a misbehaving CLI can never block launch.
+ */
+const PROBE_TIMEOUT = Duration.seconds(8);
 
 /**
  * Known CLI model ids → display metadata. Ids absent here still render (with a
@@ -158,6 +169,11 @@ export const probeCopilotCliModelEnum = (
         }),
         { includeStderr: true },
       )
-      .pipe(Effect.orElseSucceed(() => ""));
+      .pipe(
+        // A CLI that never exits (e.g. `--acp` staying open as an ACP server)
+        // must not hang startup; interrupt and fall back to the default catalog.
+        Effect.timeout(PROBE_TIMEOUT),
+        Effect.orElseSucceed(() => ""),
+      );
     return parseCopilotCliModelEnum(output);
   });
