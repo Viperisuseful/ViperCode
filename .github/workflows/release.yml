@@ -76,6 +76,9 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease
+        env:
+          NODE_ENV: production
+          CI: "true"
 
       - name: Copy APK
         run: cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk ./viper-code-mobile.apk

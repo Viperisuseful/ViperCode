@@ -27,7 +27,7 @@ if (!relayUrl) {
 export default (): ExpoConfig => ({
   name: "Viper Code",
   slug: "viper-code",
-  version: "0.3.12",
+  version: "0.3.13",
   orientation: "portrait",
   scheme: "vipercode",
   userInterfaceStyle: "automatic",
