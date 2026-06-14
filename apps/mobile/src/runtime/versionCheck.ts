@@ -1,4 +1,4 @@
-export const MOBILE_APP_VERSION = "0.1.0";
+export const MOBILE_APP_VERSION = "0.3.7";
 
 export interface VersionMismatch {
   readonly clientVersion: string;
