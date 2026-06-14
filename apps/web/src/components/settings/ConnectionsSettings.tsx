@@ -118,19 +118,11 @@ import {
 import { useUiStateStore } from "~/uiStateStore";
 import { resolveServerConfigVersionMismatch } from "~/versionSkew";
 import { useServerConfig } from "~/rpc/serverState";
-import {
-  connectManagedCloudEnvironment,
-  linkPrimaryEnvironmentToCloud,
-  unlinkPrimaryEnvironmentFromCloud,
-  updatePrimaryCloudPreferences,
-} from "~/cloud/linkEnvironment";
-import {
-  refreshManagedRelayEnvironments,
-  useManagedRelayEnvironments,
-} from "~/cloud/managedRelayState";
-import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
+import { connectManagedCloudEnvironment } from "~/cloud/linkEnvironment";
+import { useManagedRelayEnvironments } from "~/cloud/managedRelayState";
 import { webRuntime } from "~/lib/runtime";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import { ViperConnectSection } from "./ViperConnectSection";
 
 const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 
@@ -1603,166 +1595,6 @@ const DesktopSshHostRow = memo(function DesktopSshHostRow({
   );
 });
 
-function CloudLinkSwitch({
-  checked,
-  disabled,
-  disabledReason,
-  onCheckedChange,
-}: {
-  readonly checked: boolean;
-  readonly disabled: boolean;
-  readonly disabledReason: string | null;
-  readonly onCheckedChange?: (enabled: boolean) => void;
-}) {
-  const control = (
-    <Switch
-      aria-label="Enable Viper Connect"
-      checked={checked}
-      disabled={disabled}
-      {...(onCheckedChange ? { onCheckedChange } : {})}
-    />
-  );
-  return disabledReason ? (
-    <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex">{control}</span>} />
-      <TooltipPopup side="top">{disabledReason}</TooltipPopup>
-    </Tooltip>
-  ) : (
-    control
-  );
-}
-
-function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: boolean }) {
-  const { getToken, isSignedIn } = useAuth();
-  const { authPrompt, openAuthPrompt } = useT3ConnectAuthPrompt();
-  const primaryCloudLinkState = usePrimaryCloudLinkState();
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isUpdatingPreference, setIsUpdatingPreference] = useState(false);
-
-  const updateLink = async (enabled: boolean) => {
-    setIsUpdating(true);
-    setOperationError(null);
-    try {
-      const clerkToken = await getToken(resolveRelayClerkTokenOptions());
-      if (enabled) {
-        if (!clerkToken) {
-          throw new Error("Sign in to Viper Connect before linking this environment.");
-        }
-        await webRuntime.runPromise(linkPrimaryEnvironmentToCloud({ clerkToken }));
-      } else {
-        await webRuntime.runPromise(
-          unlinkPrimaryEnvironmentFromCloud({ clerkToken: clerkToken ?? null }),
-        );
-      }
-      primaryCloudLinkState.refresh();
-      refreshManagedRelayEnvironments();
-      toastManager.add({
-        type: "success",
-        title: enabled ? "Viper Connect linked" : "Viper Connect unlinked",
-        description: enabled
-          ? "This environment is available through Viper Connect."
-          : "This environment is no longer available through Viper Connect.",
-      });
-    } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "Could not update Viper Connect access.";
-      setOperationError(message);
-      toastManager.add({
-        type: "error",
-        title: "Could not update Viper Connect",
-        description: message,
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-  const updatePublishAgentActivity = async (enabled: boolean) => {
-    setIsUpdatingPreference(true);
-    try {
-      await webRuntime.runPromise(updatePrimaryCloudPreferences({ publishAgentActivity: enabled }));
-      primaryCloudLinkState.refresh();
-      toastManager.add({
-        type: "success",
-        title: enabled ? "Agent activity enabled" : "Agent activity disabled",
-        description: enabled
-          ? "This environment can publish agent activity to your notification devices."
-          : "This environment will stop publishing agent activity.",
-      });
-    } catch (cause) {
-      toastManager.add({
-        type: "error",
-        title: "Could not update Viper Connect preferences",
-        description:
-          cause instanceof Error ? cause.message : "Could not update agent activity publishing.",
-      });
-    } finally {
-      setIsUpdatingPreference(false);
-    }
-  };
-  const disabledReason = !isSignedIn
-    ? "Sign in to Viper Connect"
-    : !canManageRelay
-      ? "Your session does not have permission to manage Viper Connect access."
-      : null;
-  const linked = primaryCloudLinkState.data?.linked ?? false;
-
-  return (
-    <>
-      <SettingsRow
-        title="Viper Connect"
-        description={
-          linked
-            ? "This environment is available to your other devices through Viper Connect."
-            : "Make this environment available to your other devices through Viper Connect."
-        }
-        status={operationError ?? primaryCloudLinkState.error}
-        control={
-          <CloudLinkSwitch
-            checked={linked}
-            disabled={
-              (isSignedIn && !canManageRelay) || primaryCloudLinkState.isPending || isUpdating
-            }
-            disabledReason={disabledReason}
-            onCheckedChange={(enabled) => {
-              if (!isSignedIn) {
-                openAuthPrompt();
-                return;
-              }
-              void updateLink(enabled);
-            }}
-          />
-        }
-      />
-      {linked ? (
-        <SettingsRow
-          title="Publish agent activity"
-          description="Send agent activity from this environment to your notification devices."
-          className="bg-muted/20 pl-7 sm:pl-8"
-          control={
-            <Switch
-              aria-label="Publish agent activity"
-              checked={primaryCloudLinkState.data?.publishAgentActivity ?? false}
-              disabled={
-                !canManageRelay ||
-                !isSignedIn ||
-                primaryCloudLinkState.isPending ||
-                isUpdatingPreference
-              }
-              onCheckedChange={(enabled) => void updatePublishAgentActivity(enabled)}
-            />
-          }
-        />
-      ) : null}
-      {authPrompt}
-    </>
-  );
-}
-
-function CloudLinkRow({ canManageRelay }: { readonly canManageRelay: boolean }) {
-  return hasCloudPublicConfig() ? <ConfiguredCloudLinkRow canManageRelay={canManageRelay} /> : null;
-}
-
 function EmptyRemoteEnvironments({
   cloudEnabled = true,
   onConnectFromCloud,
@@ -2968,13 +2800,9 @@ export function ConnectionsSettings() {
                 {renderNetworkAccessRow()}
                 {renderEndpointRows("endpoint-rail")}
                 {renderTailscaleRow()}
-                <CloudLinkRow canManageRelay={canManageRelay} />
               </>
             ) : (
-              <>
-                {renderDisabledNetworkAccessRow()}
-                <CloudLinkRow canManageRelay={canManageRelay} />
-              </>
+              <>{renderDisabledNetworkAccessRow()}</>
             )}
           </SettingsSection>
 
@@ -3156,9 +2984,10 @@ export function ConnectionsSettings() {
             title="Administrative access"
             description="Pairing links and client-session management require the access:write scope for this backend."
           />
-          <CloudLinkRow canManageRelay={canManageRelay} />
         </SettingsSection>
       )}
+
+      <ViperConnectSection canManageRelay={canManageRelay} />
 
       <SettingsSection
         title="Remote environments"

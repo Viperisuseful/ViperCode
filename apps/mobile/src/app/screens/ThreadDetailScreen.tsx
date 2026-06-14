@@ -228,6 +228,15 @@ export function ThreadDetailScreen({ navigation, route }: Props) {
           contentContainerStyle={styles.messageList}
           onContentSizeChange={scrollToEnd}
           onLayout={scrollToEnd}
+          windowSize={5}
+          maxToRenderPerBatch={10}
+          initialNumToRender={15}
+          removeClippedSubviews
+          getItemLayout={(_data, index) => ({
+            length: 60,
+            offset: 60 * index,
+            index,
+          })}
         />
       )}
       <Composer onSend={handleSend} disabled={sending} />

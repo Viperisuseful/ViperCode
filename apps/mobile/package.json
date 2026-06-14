@@ -9,7 +9,8 @@
     "typecheck": "tsgo --noEmit",
     "lint": "eslint .",
     "test": "vp test run --passWithNoTests",
-    "build:android:local": "eas build --platform android --profile preview --local"
+    "build:android:local": "eas build --platform android --profile preview --local",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.14.0",

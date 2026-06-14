@@ -1,6 +1,10 @@
 import { getReconnectDelayMs, DEFAULT_RECONNECT_BACKOFF } from "../runtime/clientRuntimeImports.ts";
 import { loadEnvironmentCredential, loadKnownEnvironments } from "../storage/environmentStore.ts";
-import { MobileConnectionStore } from "./connectionStore.ts";
+import {
+  MobileConnectionStore,
+  type ConnectionErrorKind,
+  resolveErrorAction,
+} from "./connectionStore.ts";
 import { subscribeAppLifecycle } from "./appLifecycle.ts";
 import { subscribeNetworkState } from "./networkMonitor.ts";
 
@@ -14,6 +18,54 @@ export interface ConnectionServiceOptions {
   readonly reconnect: (environmentId: string) => Promise<void>;
   readonly renewCredential: (environmentId: string) => Promise<string | null>;
   readonly logWarning?: (message: string) => void;
+}
+
+export function categorizeError(cause: unknown): {
+  kind: ConnectionErrorKind;
+  message: string;
+} {
+  const msg =
+    cause instanceof Error
+      ? cause.message.toLowerCase()
+      : typeof cause === "string"
+        ? cause.toLowerCase()
+        : "connection failed";
+  const raw = cause instanceof Error ? cause.message : String(cause);
+
+  if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("token")) {
+    return { kind: "auth-failure", message: "Authentication failed. Session may have expired." };
+  }
+  if (
+    msg.includes("relay") &&
+    (msg.includes("unavailable") ||
+      msg.includes("unreachable") ||
+      msg.includes("500") ||
+      msg.includes("503"))
+  ) {
+    return { kind: "relay-unavailable", message: "Viper Connect relay is unavailable." };
+  }
+  if (
+    msg.includes("network") ||
+    msg.includes("offline") ||
+    msg.includes("econnrefused") ||
+    msg.includes("enotfound")
+  ) {
+    return { kind: "network-offline", message: "Network connection lost. Check your internet." };
+  }
+  if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("etimedout")) {
+    return { kind: "timeout", message: "Connection timed out." };
+  }
+  if (msg.includes("version") || msg.includes("incompatible") || msg.includes("drift")) {
+    return { kind: "version-drift", message: "Client and server versions are incompatible." };
+  }
+  if (msg.includes("unreachable") || msg.includes("econnreset") || msg.includes("ehostunreach")) {
+    return { kind: "server-unavailable", message: "Server is unreachable." };
+  }
+  if (msg.includes("endpoint") || msg.includes("404") || msg.includes("not found")) {
+    return { kind: "endpoint-unreachable", message: "The environment endpoint is not reachable." };
+  }
+
+  return { kind: "unknown", message: raw || "Connection failed." };
 }
 
 export class MobileConnectionService {
@@ -72,7 +124,7 @@ export class MobileConnectionService {
 
     const credential = await loadEnvironmentCredential(environmentId);
     if (!credential) {
-      this.store.setState(environmentId, "requires-auth", "No saved credential.");
+      this.store.setState(environmentId, "requires-auth", "No saved credential.", "auth-failure");
       return;
     }
 
@@ -84,8 +136,9 @@ export class MobileConnectionService {
       this.store.setState(environmentId, "connected");
       this.retryCounters.set(environmentId, 0);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Connection failed.";
-      this.store.setState(environmentId, "error", message);
+      const err = categorizeError(cause);
+      const actionHint = resolveErrorAction(err.kind);
+      this.store.setState(environmentId, "error", `${err.message} ${actionHint}`, err.kind);
       this.scheduleRetry(environmentId);
     }
   }
@@ -126,7 +179,7 @@ export class MobileConnectionService {
 
     const credential = await loadEnvironmentCredential(environmentId);
     if (!credential) {
-      this.store.setState(environmentId, "requires-auth", "No saved credential.");
+      this.store.setState(environmentId, "requires-auth", "No saved credential.", "auth-failure");
       return;
     }
 
@@ -138,9 +191,9 @@ export class MobileConnectionService {
       this.retryCounters.set(environmentId, 0);
       this.renewalAttempts.delete(environmentId);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Reconnect failed.";
+      const err = categorizeError(cause);
 
-      if (this.isAuthError(message)) {
+      if (err.kind === "auth-failure") {
         const attempts = this.renewalAttempts.get(environmentId) ?? 0;
         if (attempts >= MAX_RENEWAL_ATTEMPTS) {
           this.renewalAttempts.delete(environmentId);
@@ -148,6 +201,7 @@ export class MobileConnectionService {
             environmentId,
             "requires-auth",
             "Credential renewal failed after retries.",
+            "auth-failure",
           );
           return;
         }
@@ -159,11 +213,12 @@ export class MobileConnectionService {
           void this.reconnectEnvironment(environmentId);
           return;
         }
-        this.store.setState(environmentId, "requires-auth", "Credential expired.");
+        this.store.setState(environmentId, "requires-auth", "Credential expired.", "auth-failure");
         return;
       }
 
-      this.store.setState(environmentId, "error", message);
+      const actionHint = resolveErrorAction(err.kind);
+      this.store.setState(environmentId, "error", `${err.message} ${actionHint}`, err.kind);
       this.scheduleRetry(environmentId);
     }
   }
@@ -212,17 +267,6 @@ export class MobileConnectionService {
       clearTimeout(timer);
       this.retryTimers.delete(id);
     }
-  }
-
-  private isAuthError(message: string): boolean {
-    const lower = message.toLowerCase();
-    return (
-      lower.includes("401") ||
-      lower.includes("unauthorized") ||
-      lower.includes("token expired") ||
-      lower.includes("invalid token") ||
-      lower.includes("requires-auth")
-    );
   }
 
   private async tryRenewCredential(environmentId: string): Promise<boolean> {
