@@ -1,4 +1,4 @@
-import type { ThreadId } from "@vipercode/contracts";
+import type { ApprovalRequestId, ProviderRequestKind, ThreadId } from "@vipercode/contracts";
 
 export interface ThreadMessage {
   readonly id: string;
@@ -13,12 +13,29 @@ export interface ThreadPlan {
   readonly id: string;
   readonly planMarkdown: string;
   readonly implementedAt: string | null;
+  readonly turnId: string | null;
+  readonly implementationThreadId: string | null;
 }
 
 export interface ThreadActivity {
   readonly id: string;
   readonly summary: string;
   readonly turnId: string | null;
+  readonly createdAt: string;
+}
+
+export interface PendingApproval {
+  readonly requestId: ApprovalRequestId;
+  readonly kind: ProviderRequestKind;
+  readonly summary: string;
+  readonly nodeId: string;
+  readonly createdAt: string;
+}
+
+export interface PendingUserInput {
+  readonly requestId: ApprovalRequestId;
+  readonly prompt: string;
+  readonly nodeId: string;
   readonly createdAt: string;
 }
 
@@ -35,6 +52,8 @@ export interface ThreadDetailState {
   readonly messages: ReadonlyArray<ThreadMessage>;
   readonly plans: ReadonlyArray<ThreadPlan>;
   readonly activities: ReadonlyArray<ThreadActivity>;
+  readonly pendingApprovals: ReadonlyArray<PendingApproval>;
+  readonly pendingUserInputs: ReadonlyArray<PendingUserInput>;
   readonly status: string;
   readonly hasPendingApprovals: boolean;
   readonly hasPendingUserInput: boolean;
@@ -47,6 +66,8 @@ export const EMPTY_THREAD_DETAIL: ThreadDetailState = {
   messages: [],
   plans: [],
   activities: [],
+  pendingApprovals: [],
+  pendingUserInputs: [],
   status: "idle",
   hasPendingApprovals: false,
   hasPendingUserInput: false,

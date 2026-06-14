@@ -1,10 +1,11 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EnvironmentId, ThreadId } from "@vipercode/contracts";
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo } from "react";
 import { Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
 import { theme } from "../../theme/index.ts";
 import { useShellSnapshot } from "../../shell/useShellSnapshot.ts";
+import type { ProviderStatus } from "../../components/ProviderStatusBanner.tsx";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EnvironmentThreads">;
 
@@ -53,6 +54,53 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
     // Connection and shell subscription start when this screen mounts.
     // For now the shell is populated via setShellState from connection layer.
   }, [environmentId]);
+
+  const providers: ReadonlyArray<ProviderStatus> = useMemo(
+    () => [
+      {
+        instanceId: "codex",
+        label: "Codex (OpenAI)",
+        driverLabel: "codex",
+        availability: "ready" as const,
+        message: null,
+      },
+      {
+        instanceId: "claude_agent",
+        label: "Claude Agent",
+        driverLabel: "claude",
+        availability: "needs-setup" as const,
+        message: "API key not configured",
+      },
+    ],
+    [],
+  );
+
+  const headerRight = useCallback(
+    () => (
+      <Pressable
+        onPress={() =>
+          navigation.navigate("NewThread", {
+            environmentId,
+            label: route.params.label,
+            projects: shell.projects.map((p) => ({
+              id: p.id,
+              title: p.title,
+              workspaceRoot: p.workspaceRoot,
+            })),
+            providers,
+          })
+        }
+        hitSlop={8}
+      >
+        <Text style={styles.headerButton}>+ New</Text>
+      </Pressable>
+    ),
+    [navigation, environmentId, route.params.label, shell.projects, providers],
+  );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerRight });
+  }, [navigation, headerRight]);
 
   const sections = useMemo(() => {
     if (shell.threads.length === 0) {
@@ -190,5 +238,10 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginLeft: theme.spacing.sm,
+  },
+  headerButton: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

@@ -5,6 +5,7 @@ import { HomeScreen } from "../screens/HomeScreen.tsx";
 import { PairScreen } from "../screens/PairScreen.tsx";
 import { EnvironmentThreadsScreen } from "../screens/EnvironmentThreadsScreen.tsx";
 import { ThreadDetailScreen } from "../screens/ThreadDetailScreen.tsx";
+import { NewThreadScreen } from "../screens/NewThreadScreen.tsx";
 import { SettingsScreen } from "../screens/SettingsScreen.tsx";
 import { theme } from "../../theme/index.ts";
 
@@ -13,6 +14,18 @@ export type RootStackParamList = {
   Pair: undefined;
   EnvironmentThreads: { environmentId: string; label: string };
   ThreadDetail: { threadId: string; title: string };
+  NewThread: {
+    environmentId: string;
+    label: string;
+    projects: ReadonlyArray<{ id: string; title: string; workspaceRoot: string }>;
+    providers: ReadonlyArray<{
+      instanceId: string;
+      label: string;
+      driverLabel: string;
+      availability: "ready" | "unavailable" | "needs-setup";
+      message: string | null;
+    }>;
+  };
   Settings: undefined;
 };
 
@@ -42,6 +55,11 @@ export function AppNavigator() {
           options={({ route }) => ({ title: route.params.title })}
         />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
+        <Stack.Screen
+          name="NewThread"
+          component={NewThreadScreen}
+          options={{ title: "New Thread" }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
