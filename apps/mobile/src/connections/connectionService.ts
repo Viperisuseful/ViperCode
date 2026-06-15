@@ -108,6 +108,19 @@ export class MobileConnectionService {
         this.clearAllRetryTimers();
       },
     });
+
+    void this.autoConnectKnown();
+  }
+
+  private async autoConnectKnown(): Promise<void> {
+    if (this.disposed) return;
+    const records = await loadKnownEnvironments();
+    for (const record of records) {
+      const credential = await loadEnvironmentCredential(record.environmentId);
+      if (!credential) continue;
+      this.store.upsert(record);
+      void this.connectEnvironment(record.environmentId);
+    }
   }
 
   setNetworkSubscription(unsubscribe: () => void): void {

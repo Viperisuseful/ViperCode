@@ -6,6 +6,9 @@ export interface ModelOption {
   readonly instanceId: string;
   readonly label: string;
   readonly model: string;
+  readonly modelName: string;
+  readonly subProvider: string | null;
+  readonly providerLabel: string;
 }
 
 interface Props {
@@ -46,8 +49,11 @@ export function ModelPickerSheet({ visible, options, selected, onSelect, onClose
                   onPress={() => handleSelect(option)}
                 >
                   <View style={styles.optionInfo}>
-                    <Text style={styles.optionLabel}>{option.label}</Text>
-                    <Text style={styles.optionModel}>{option.model}</Text>
+                    <Text style={styles.optionLabel}>{option.modelName}</Text>
+                    <Text style={styles.optionModel}>
+                      {option.providerLabel}
+                      {option.subProvider ? ` · ${option.subProvider}` : ""}
+                    </Text>
                   </View>
                   {isSelected && (
                     <View style={styles.checkmark}>

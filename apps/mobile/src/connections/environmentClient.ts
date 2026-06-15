@@ -13,7 +13,7 @@ import {
   resolveRemoteWebSocketConnectionUrl,
 } from "@vipercode/client-runtime";
 import { setShellState, getShellState } from "../shell/useShellSnapshot.ts";
-import { shellStateFromSnapshot } from "../shell/shellTypes.ts";
+import { shellStateFromSnapshot, providerInfoFromServerProviders } from "../shell/shellTypes.ts";
 import { setThreadDetail, getThreadDetail } from "../thread/useThreadDetail.ts";
 import type { CheckpointFile } from "../thread/threadTypes.ts";
 import { mobileRuntime } from "../runtime/mobileRuntime.ts";
@@ -22,6 +22,7 @@ interface EnvironmentClientEntry {
   readonly client: WsRpcClient;
   readonly environmentId: EnvironmentId;
   shellUnsub: (() => void) | null;
+  configUnsub: (() => void) | null;
 }
 
 const clients = new Map<EnvironmentId, EnvironmentClientEntry>();
@@ -40,6 +41,8 @@ export async function disconnectEnvironmentClient(environmentId: EnvironmentId):
 
   entry.shellUnsub?.();
   entry.shellUnsub = null;
+  entry.configUnsub?.();
+  entry.configUnsub = null;
 
   try {
     await entry.client.dispose();
@@ -84,6 +87,7 @@ export async function connectEnvironmentClient(
     client,
     environmentId,
     shellUnsub: null,
+    configUnsub: null,
   };
 
   clients.set(environmentId, entry);
@@ -179,6 +183,16 @@ export async function connectEnvironmentClient(
         });
       }
     }
+  });
+
+  entry.configUnsub = client.server.subscribeConfig((event) => {
+    if (event.type !== "snapshot" && event.type !== "providerStatuses") return;
+    const providers = event.type === "snapshot" ? event.config.providers : event.payload.providers;
+    if (!providers) return;
+    const current = getShellState(environmentId);
+    if (!current || current.isPending) return;
+    const updated = providerInfoFromServerProviders(providers);
+    setShellState(environmentId, { ...current, providers: updated });
   });
 
   return client;

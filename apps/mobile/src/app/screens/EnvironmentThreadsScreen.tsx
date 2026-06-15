@@ -1,12 +1,11 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EnvironmentId, ThreadId } from "@vipercode/contracts";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo } from "react";
 import { Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
 import { theme } from "../../theme/index.ts";
 import { useShellSnapshot } from "../../shell/useShellSnapshot.ts";
-import type { ProviderStatus } from "../../components/ProviderStatusBanner.tsx";
-import { getEnvironmentClient } from "../../connections/environmentClient.ts";
+import type { ProviderInfo } from "../../shell/shellTypes.ts";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EnvironmentThreads">;
 
@@ -51,40 +50,13 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
   const { environmentId } = route.params;
   const shell = useShellSnapshot(environmentId as EnvironmentId);
 
-  useEffect(() => {
-    // Shell state is populated by the connection layer via setShellState.
-  }, [environmentId]);
-
-  const providers: ReadonlyArray<ProviderStatus> = useMemo(() => [], []);
-
-  const [_providersForNav, setProvidersForNav] = useState<ReadonlyArray<ProviderStatus>>([]);
-
-  useEffect(() => {
-    const eid = environmentId as EnvironmentId;
-    const client = getEnvironmentClient(eid);
-    if (!client) return;
-    const unsub = client.server.subscribeConfig((event) => {
-      if (event.type !== "snapshot") return;
-      const provs = event.config.providers;
-      if (!provs) return;
-      const entries = Object.entries(provs);
-      setProvidersForNav(
-        entries.map(([instanceId, p]) => ({
-          instanceId,
-          label: p.displayName ?? p.driver,
-          driverLabel: p.driver,
-          availability:
-            p.status === "ready"
-              ? ("ready" as const)
-              : p.status === "disabled" || !p.enabled
-                ? ("needs-setup" as const)
-                : ("unavailable" as const),
-          message: p.auth?.status === "unauthenticated" ? "Auth required" : null,
-        })),
-      );
-    });
-    return () => unsub();
-  }, [environmentId]);
+  const selectableProviders = useMemo<ReadonlyArray<ProviderInfo>>(
+    () =>
+      shell.providers.filter(
+        (p) => p.enabled && p.installed && p.availability !== "unavailable" && p.status === "ready",
+      ),
+    [shell.providers],
+  );
 
   const headerRight = useCallback(
     () => (
@@ -98,7 +70,7 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
               title: p.title,
               workspaceRoot: p.workspaceRoot,
             })),
-            providers: _providersForNav,
+            providers: selectableProviders,
           })
         }
         hitSlop={8}
@@ -106,7 +78,7 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
         <Text style={styles.headerButton}>+ New</Text>
       </Pressable>
     ),
-    [navigation, environmentId, route.params.label, shell.projects, providers],
+    [navigation, environmentId, route.params.label, shell.projects, selectableProviders],
   );
 
   useLayoutEffect(() => {

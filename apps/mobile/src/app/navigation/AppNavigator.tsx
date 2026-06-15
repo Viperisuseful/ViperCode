@@ -20,9 +20,23 @@ export type RootStackParamList = {
     projects: ReadonlyArray<{ id: string; title: string; workspaceRoot: string }>;
     providers: ReadonlyArray<{
       instanceId: string;
-      label: string;
-      driverLabel: string;
-      availability: "ready" | "unavailable" | "needs-setup";
+      displayName: string;
+      driver: string;
+      accentColor: string | null;
+      enabled: boolean;
+      installed: boolean;
+      status: "ready" | "warning" | "error" | "disabled";
+      availability: "available" | "unavailable";
+      models: ReadonlyArray<{
+        slug: string;
+        name: string;
+        shortName: string | null;
+        subProvider: string | null;
+        isCustom: boolean;
+        availability: "available" | "unavailable" | null;
+        unavailableReason: string | null;
+      }>;
+      authStatus: string | null;
       message: string | null;
     }>;
   };

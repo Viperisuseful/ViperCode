@@ -55,13 +55,14 @@ export type ConnectionStoreListener = () => void;
 export class MobileConnectionStore {
   private entries = new Map<string, ConnectionEntry>();
   private listeners = new Set<ConnectionStoreListener>();
+  private snapshot: ReadonlyArray<ConnectionEntry> = [];
 
   get(environmentId: string): ConnectionEntry | undefined {
     return this.entries.get(environmentId);
   }
 
   getAll(): ReadonlyArray<ConnectionEntry> {
-    return Array.from(this.entries.values());
+    return this.snapshot;
   }
 
   getState(environmentId: string): MobileConnectionState {
@@ -83,6 +84,7 @@ export class MobileConnectionStore {
       errorKind: errorKind ?? null,
       lastConnectedAt: state === "connected" ? new Date().toISOString() : existing.lastConnectedAt,
     });
+    this.snapshot = Array.from(this.entries.values());
     this.notify();
   }
 
@@ -96,11 +98,13 @@ export class MobileConnectionStore {
       errorKind: existing?.errorKind ?? null,
       lastConnectedAt: existing?.lastConnectedAt ?? record.lastConnectedAt,
     });
+    this.snapshot = Array.from(this.entries.values());
     this.notify();
   }
 
   remove(environmentId: string): void {
     this.entries.delete(environmentId);
+    this.snapshot = Array.from(this.entries.values());
     this.notify();
   }
 

@@ -8,6 +8,28 @@ import { ModelPickerSheet } from "../../components/ModelPickerSheet.tsx";
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewThread">;
 
+interface ProviderParam {
+  readonly instanceId: string;
+  readonly displayName: string;
+  readonly driver: string;
+  readonly accentColor: string | null;
+  readonly enabled: boolean;
+  readonly installed: boolean;
+  readonly status: "ready" | "warning" | "error" | "disabled";
+  readonly availability: "available" | "unavailable";
+  readonly models: ReadonlyArray<{
+    slug: string;
+    name: string;
+    shortName: string | null;
+    subProvider: string | null;
+    isCustom: boolean;
+    availability: "available" | "unavailable" | null;
+    unavailableReason: string | null;
+  }>;
+  readonly authStatus: string | null;
+  readonly message: string | null;
+}
+
 export function NewThreadScreen({ navigation, route }: Props) {
   const { environmentId: _envId, label: _label, projects, providers } = route.params;
 
@@ -18,17 +40,30 @@ export function NewThreadScreen({ navigation, route }: Props) {
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const modelOptions = useMemo<ReadonlyArray<ModelOption>>(
-    () =>
-      providers
-        .filter((p) => p.availability === "ready")
-        .map((p) => ({
-          instanceId: p.instanceId,
-          label: p.label,
-          model: "",
-        })),
-    [providers],
-  );
+  const modelOptions = useMemo<ReadonlyArray<ModelOption>>(() => {
+    const options: ModelOption[] = [];
+    for (const provider of providers as ReadonlyArray<ProviderParam>) {
+      if (
+        !provider.enabled ||
+        !provider.installed ||
+        provider.availability === "unavailable" ||
+        provider.status !== "ready"
+      )
+        continue;
+      for (const model of provider.models) {
+        if (model.availability === "unavailable") continue;
+        options.push({
+          instanceId: provider.instanceId,
+          label: provider.displayName,
+          model: model.slug,
+          modelName: model.shortName ?? model.name,
+          subProvider: model.subProvider,
+          providerLabel: provider.displayName,
+        });
+      }
+    }
+    return options;
+  }, [providers]);
 
   const handleCreate = useCallback(() => {
     if (creating || !title.trim() || !message.trim() || !selectedProjectId) return;
@@ -46,7 +81,7 @@ export function NewThreadScreen({ navigation, route }: Props) {
     title.trim().length > 0 && message.trim().length > 0 && selectedProjectId !== null && !creating;
 
   const selectedProviderLabel = selectedModel
-    ? `${selectedModel.label} (${selectedModel.model})`
+    ? `${selectedModel.providerLabel} · ${selectedModel.modelName}`
     : "Tap to select...";
 
   return (

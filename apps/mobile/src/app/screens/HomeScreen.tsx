@@ -1,6 +1,12 @@
 import { useAuth } from "@clerk/clerk-expo";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useSyncExternalStore,
+  useState,
+} from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
@@ -56,15 +62,14 @@ export function HomeScreen({ navigation }: Props) {
     });
   }, [navigation, headerRight]);
 
-  const entries = useMemo(() => store.getAll(), [store]);
+  const entries = useSyncExternalStore(
+    useCallback((onChange: () => void) => store.subscribe(onChange), [store]),
+    useCallback(() => store.getAll(), [store]),
+  );
 
   useEffect(() => {
-    const unsubscribe = store.subscribe(() => {
-      setPairedEnvs((prev) => prev);
-    });
     void loadKnownEnvironments().then(setPairedEnvs);
-    return () => unsubscribe();
-  }, [store]);
+  }, []);
 
   const hasRelay = hasRelayConfig && isSignedIn;
   const hasPaired = pairedEnvs.length > 0;
