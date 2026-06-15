@@ -3,7 +3,12 @@ import { readPublicJson, writePublicJson } from "./publicStorage.ts";
 import { readSecure, writeSecure, removeSecure } from "./secureStorage.ts";
 
 const KNOWN_ENVIRONMENTS_KEY = "vipercode:known-environments";
-const ENVIRONMENT_CREDENTIAL_PREFIX = "vipercode:env-credential:";
+const ENVIRONMENT_CREDENTIAL_PREFIX = "vipercode_env-credential_";
+
+function credentialKey(environmentId: string): string {
+  const safe = environmentId.replace(/[^A-Za-z0-9._-]/g, "_");
+  return `${ENVIRONMENT_CREDENTIAL_PREFIX}${safe}`;
+}
 
 export async function loadKnownEnvironments(): Promise<
   ReadonlyArray<MobileKnownEnvironmentRecord>
@@ -23,20 +28,20 @@ export async function removeKnownEnvironment(environmentId: string): Promise<voi
   const existing = await loadKnownEnvironments();
   const filtered = existing.filter((e) => e.environmentId !== environmentId);
   await writePublicJson(KNOWN_ENVIRONMENTS_KEY, filtered);
-  await removeSecure(`${ENVIRONMENT_CREDENTIAL_PREFIX}${environmentId}`);
+  await removeSecure(credentialKey(environmentId));
 }
 
 export async function saveEnvironmentCredential(
   environmentId: string,
   bearerToken: string,
 ): Promise<void> {
-  await writeSecure(`${ENVIRONMENT_CREDENTIAL_PREFIX}${environmentId}`, bearerToken);
+  await writeSecure(credentialKey(environmentId), bearerToken);
 }
 
 export async function loadEnvironmentCredential(environmentId: string): Promise<string | null> {
-  return readSecure(`${ENVIRONMENT_CREDENTIAL_PREFIX}${environmentId}`);
+  return readSecure(credentialKey(environmentId));
 }
 
 export async function removeEnvironmentCredential(environmentId: string): Promise<void> {
-  await removeSecure(`${ENVIRONMENT_CREDENTIAL_PREFIX}${environmentId}`);
+  await removeSecure(credentialKey(environmentId));
 }

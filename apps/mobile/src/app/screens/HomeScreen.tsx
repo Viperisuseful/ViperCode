@@ -1,6 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
@@ -14,6 +14,7 @@ import { useRelayEnvironments } from "../../runtime/useRelayEnvironments.ts";
 import { useConnectionStore, useConnectionService } from "../../connections/ConnectionProvider.tsx";
 import { hasRelayConfig } from "../../runtime/mobileRuntime.ts";
 import { resolveMobilePublicConfig } from "../../runtime/resolveConfig.ts";
+import { ViperCodeMark, ViperCodeHeaderTitle } from "../../components/ViperCodeLogo.tsx";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
 
@@ -39,6 +40,22 @@ export function HomeScreen({ navigation }: Props) {
   const relay = useRelayEnvironments();
   const [pairedEnvs, setPairedEnvs] = useState<ReadonlyArray<MobileKnownEnvironmentRecord>>([]);
 
+  const headerRight = useCallback(
+    () => (
+      <Pressable onPress={() => navigation.navigate("Pair")} hitSlop={12} style={styles.headerAdd}>
+        <Text style={styles.headerAddText}>+</Text>
+      </Pressable>
+    ),
+    [navigation],
+  );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: ViperCodeHeaderTitle,
+      headerRight,
+    });
+  }, [navigation, headerRight]);
+
   const entries = useMemo(() => store.getAll(), [store]);
 
   useEffect(() => {
@@ -60,7 +77,7 @@ export function HomeScreen({ navigation }: Props) {
 
       {isEmpty ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.title}>Viper Code</Text>
+          <ViperCodeMark size={48} style={styles.emptyLogo} />
           {isSignedIn ? (
             <>
               <Text style={styles.subtitle}>No environments yet.</Text>
@@ -124,12 +141,6 @@ export function HomeScreen({ navigation }: Props) {
           }}
         />
       )}
-
-      {isSignedIn ? null : <Text style={styles.signInHint}>Sign in to see your environments.</Text>}
-
-      <Pressable style={styles.pairButton} onPress={() => navigation.navigate("Pair")}>
-        <Text style={styles.pairButtonText}>Pair Environment</Text>
-      </Pressable>
     </View>
   );
 }
@@ -145,12 +156,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: theme.spacing.lg,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-    fontFamily: theme.font.sans,
+  emptyLogo: {
+    marginBottom: theme.spacing.md,
   },
   subtitle: {
     fontSize: 16,
@@ -165,12 +172,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: theme.font.sans,
   },
-  signInHint: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    textAlign: "center",
-    paddingBottom: theme.spacing.sm,
+  headerAdd: {
+    marginRight: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  headerAddText: {
+    fontSize: 22,
+    fontWeight: "400",
+    color: theme.colors.primary,
     fontFamily: theme.font.sans,
+    lineHeight: 26,
   },
   listContent: {
     padding: theme.spacing.md,
@@ -211,21 +223,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     marginLeft: theme.spacing.sm,
-  },
-  pairButton: {
-    backgroundColor: theme.colors.primary,
-    margin: theme.spacing.md,
-    borderRadius: theme.radius.button,
-    padding: theme.spacing.md,
-    alignItems: "center",
-    height: 48,
-    justifyContent: "center",
-  },
-  pairButtonText: {
-    color: theme.colors.primaryForeground,
-    fontSize: 15,
-    fontWeight: "600",
-    fontFamily: theme.font.sans,
   },
   pairButtonPrimary: {
     backgroundColor: theme.colors.primary,
