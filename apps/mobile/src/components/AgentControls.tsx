@@ -39,15 +39,19 @@ export function AgentControls({ status, onStop, onRetry }: Props) {
     onRetry();
   }, [onRetry]);
 
+  if (!isRunning(status) && !canRetry(status)) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       {isRunning(status) && (
-        <Pressable style={styles.stopButton} onPress={handleStop}>
+        <Pressable onPress={handleStop}>
           <Text style={styles.stopText}>Stop</Text>
         </Pressable>
       )}
       {canRetry(status) && (
-        <Pressable style={styles.retryButton} onPress={handleRetry}>
+        <Pressable onPress={handleRetry}>
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>
       )}
@@ -60,33 +64,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    gap: theme.spacing.sm,
-  },
-  stopButton: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: theme.colors.error,
-    borderRadius: theme.radius.button,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   stopText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: theme.colors.error,
     fontFamily: theme.font.sans,
   },
-  retryButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.button,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
   retryText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
-    color: theme.colors.primaryForeground,
+    color: theme.colors.primary,
     fontFamily: theme.font.sans,
   },
 });

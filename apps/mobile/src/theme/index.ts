@@ -4,7 +4,7 @@ export const theme = {
     surface: "#141417",
     surfaceElevated: "#1C1C20",
     border: "#26262B",
-    primary: "#4F6BFF",
+    primary: "#3870F9",
     primaryForeground: "#FFFFFF",
     text: "#F5F5F5",
     textSecondary: "#A1A1AA",

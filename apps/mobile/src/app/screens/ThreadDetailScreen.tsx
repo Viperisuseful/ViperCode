@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
 import { theme } from "../../theme/index.ts";
 import { useThreadDetail, setThreadDetail } from "../../thread/useThreadDetail.ts";
@@ -228,10 +229,16 @@ export function ThreadDetailScreen({ navigation, route }: Props) {
   const renderHeader = useCallback(() => {
     if (detail.isPending && !hasControls) return null;
 
+    const showStatusBanner = providerStatuses.length > 0 || detail.status !== "idle";
+
     return (
       <View>
-        <ProviderStatusBanner providers={providerStatuses} />
-        <AgentControls status={detail.status} onStop={handleStop} onRetry={handleRetry} />
+        {showStatusBanner && (
+          <View style={styles.statusBanner}>
+            <ProviderStatusBanner providers={providerStatuses} />
+            <AgentControls status={detail.status} onStop={handleStop} onRetry={handleRetry} />
+          </View>
+        )}
         {detail.pendingApprovals.map((approval) => (
           <ApprovalCard
             key={approval.requestId as string}
@@ -276,13 +283,14 @@ export function ThreadDetailScreen({ navigation, route }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
+      <StatusBar style="light" />
       {detail.isPending && messages.length === 0 ? (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading thread...</Text>
+          <Text style={styles.loadingTitle}>Loading thread...</Text>
         </View>
       ) : messages.length === 0 && !hasControls ? (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>No messages yet.</Text>
+          <Text style={styles.loadingTitle}>No messages yet.</Text>
           <Text style={styles.loadingHint}>Send a message to start the conversation.</Text>
         </View>
       ) : (
@@ -348,7 +356,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   messageList: {
+    paddingVertical: 8,
+  },
+  statusBanner: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    margin: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+    overflow: "hidden",
   },
   loadingContainer: {
     flex: 1,
@@ -356,15 +373,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: theme.spacing.lg,
   },
-  loadingText: {
+  loadingTitle: {
     fontSize: 16,
-    color: theme.colors.textSecondary,
+    fontWeight: "600",
+    color: theme.colors.text,
     marginBottom: theme.spacing.sm,
     fontFamily: theme.font.sans,
   },
   loadingHint: {
     fontSize: 13,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
     textAlign: "center",
     fontFamily: theme.font.sans,
   },

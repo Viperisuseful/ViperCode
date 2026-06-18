@@ -1,5 +1,8 @@
 import { NavigationContainer, type LinkingOptions } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from "@react-navigation/native-stack";
 import React from "react";
 import { HomeScreen } from "../screens/HomeScreen.tsx";
 import { PairScreen } from "../screens/PairScreen.tsx";
@@ -7,6 +10,7 @@ import { EnvironmentThreadsScreen } from "../screens/EnvironmentThreadsScreen.ts
 import { ThreadDetailScreen } from "../screens/ThreadDetailScreen.tsx";
 import { NewThreadScreen } from "../screens/NewThreadScreen.tsx";
 import { SettingsScreen } from "../screens/SettingsScreen.tsx";
+import { ViperCodeHeaderTitle } from "../../components/ViperCodeLogo.tsx";
 import { theme } from "../../theme/index.ts";
 
 export type RootStackParamList = {
@@ -55,13 +59,28 @@ export function AppNavigator({
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: { backgroundColor: theme.colors.surface },
-          headerTintColor: theme.colors.primary,
-          headerTitleStyle: { fontFamily: theme.font.sans, fontWeight: "700", fontSize: 20 },
+          headerStyle: {
+            backgroundColor: theme.colors.surface,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.border,
+            shadowColor: "transparent",
+            elevation: 0,
+          } as NativeStackNavigationOptions["headerStyle"],
+          headerTintColor: theme.colors.text,
+          headerTitleStyle: {
+            fontFamily: theme.font.sans,
+            fontWeight: "700",
+            fontSize: 20,
+            color: theme.colors.text,
+          },
           contentStyle: { backgroundColor: theme.colors.background },
         }}
       >
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "Viper Code" }} />
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          options={{ headerTitle: () => <ViperCodeHeaderTitle /> }}
+        />
         <Stack.Screen name="Pair" component={PairScreen} options={{ title: "Pair Environment" }} />
         <Stack.Screen
           name="EnvironmentThreads"

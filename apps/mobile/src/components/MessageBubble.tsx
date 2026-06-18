@@ -34,21 +34,21 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   bubble: {
-    maxWidth: "85%",
     borderRadius: theme.radius.card,
+    maxWidth: "85%",
     padding: theme.spacing.md,
-  },
-  userBubble: {
-    backgroundColor: theme.colors.primary,
   },
   assistantBubble: {
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
+  userBubble: {
+    backgroundColor: theme.colors.primary,
+  },
   text: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     fontFamily: theme.font.sans,
   },
   userText: {

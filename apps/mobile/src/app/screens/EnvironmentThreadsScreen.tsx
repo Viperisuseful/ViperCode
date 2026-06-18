@@ -1,7 +1,8 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EnvironmentId, ThreadId } from "@vipercode/contracts";
 import React, { useCallback, useLayoutEffect, useMemo } from "react";
-import { Pressable, SectionList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import type { RootStackParamList } from "../navigation/AppNavigator.tsx";
 import { theme } from "../../theme/index.ts";
 import { useShellSnapshot } from "../../shell/useShellSnapshot.ts";
@@ -73,7 +74,8 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
             providers: selectableProviders,
           })
         }
-        hitSlop={8}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={styles.headerAction}
       >
         <Text style={styles.headerButton}>+ New</Text>
       </Pressable>
@@ -106,63 +108,78 @@ export function EnvironmentThreadsScreen({ navigation, route }: Props) {
     return Array.from(grouped.entries()).map(([title, data]) => ({ title, data }));
   }, [shell]);
 
-  if (shell.isPending && shell.threads.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>Loading...</Text>
-        <Text style={styles.emptyHint}>Fetching projects and threads.</Text>
-      </View>
-    );
-  }
-
-  if (!shell.isPending && shell.threads.length === 0 && shell.error === null) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>No Threads</Text>
-        <Text style={styles.emptyHint}>
-          No threads in this environment. Start a new thread from the web app.
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <SectionList
-      sections={sections}
-      keyExtractor={(item) => item.id}
-      renderSectionHeader={({ section: { title } }) => (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderText}>{title}</Text>
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      {shell.isPending && shell.threads.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Loading threads...</Text>
         </View>
-      )}
-      renderItem={({ item }) => (
-        <Pressable
-          style={styles.threadRow}
-          onPress={() =>
-            navigation.navigate("ThreadDetail", {
-              environmentId,
-              threadId: item.id as ThreadId,
-              title: item.title,
-            })
-          }
-        >
-          <View style={styles.threadInfo}>
-            <Text style={styles.threadTitle}>{item.title}</Text>
-            <Text style={styles.threadMeta}>
-              {statusLabel(item.status)}
-              {item.hasPendingApprovals ? " · Needs Approval" : ""}
-              {item.hasPendingUserInput ? " · Needs Input" : ""}
-            </Text>
+      ) : shell.error && shell.threads.length === 0 ? (
+        <View style={styles.centered}>
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{shell.error}</Text>
           </View>
-          <View style={[styles.statusDot, { backgroundColor: threadStatusColor(item.status) }]} />
-        </Pressable>
+        </View>
+      ) : !shell.isPending && shell.threads.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyTitle}>No Threads</Text>
+          <Text style={styles.emptyHint}>
+            No threads in this environment. Start a new thread from the web app.
+          </Text>
+        </View>
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionHeaderText}>{title}</Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.threadRow}
+              onPress={() =>
+                navigation.navigate("ThreadDetail", {
+                  environmentId,
+                  threadId: item.id as ThreadId,
+                  title: item.title,
+                })
+              }
+            >
+              <View style={styles.threadInfo}>
+                <Text style={styles.threadTitle}>{item.title}</Text>
+                <Text style={styles.threadMeta}>
+                  {statusLabel(item.status)}
+                  {item.hasPendingApprovals ? " · Needs Approval" : ""}
+                  {item.hasPendingUserInput ? " · Needs Input" : ""}
+                </Text>
+              </View>
+              <View
+                style={[styles.statusDot, { backgroundColor: threadStatusColor(item.status) }]}
+              />
+            </Pressable>
+          )}
+          contentContainerStyle={styles.listContent}
+        />
       )}
-      contentContainerStyle={styles.listContent}
-    />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: theme.spacing.lg,
+  },
   listContent: {
     paddingBottom: theme.spacing.lg,
   },
@@ -185,16 +202,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: theme.font.sans,
   },
+  loadingText: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.sm,
+    fontFamily: theme.font.sans,
+  },
   sectionHeader: {
-    backgroundColor: theme.colors.background,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
   },
   sectionHeaderText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     color: theme.colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -204,9 +225,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.surface,
-    padding: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+    minHeight: 48,
   },
   threadInfo: {
     flex: 1,
@@ -218,8 +241,8 @@ const styles = StyleSheet.create({
     fontFamily: theme.font.sans,
   },
   threadMeta: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
+    fontSize: 12,
+    color: theme.colors.textMuted,
     marginTop: 2,
     fontFamily: theme.font.sans,
   },
@@ -229,10 +252,41 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginLeft: theme.spacing.sm,
   },
+  headerAction: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: theme.spacing.md,
+  },
   headerButton: {
     color: theme.colors.primary,
     fontSize: 15,
     fontWeight: "600",
+    fontFamily: theme.font.sans,
+  },
+  errorBanner: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+    borderRadius: 12,
+    padding: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+    width: "100%",
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.error,
+    fontFamily: theme.font.sans,
+  },
+  errorBannerAction: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.error,
     fontFamily: theme.font.sans,
   },
 });
