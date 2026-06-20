@@ -161,6 +161,7 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/withAndroidCleartextTraffic.cjs",
+    "./plugins/withExpo56ReactHost.cjs",
   ],
   extra: {
     appVariant: APP_VARIANT,
