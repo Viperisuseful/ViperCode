@@ -44,10 +44,6 @@ export default function SettingsLayout() {
         options={{ animation: "slide_from_right", title: "Add Environment" }}
       />
       <Stack.Screen
-        name="waitlist"
-        options={{ animation: "slide_from_right", title: "Join the waitlist" }}
-      />
-      <Stack.Screen
         name="archive"
         listeners={{ transitionEnd: handleExpandedRouteTransitionEnd }}
         options={{ animation: "slide_from_right", title: "Archived Threads" }}

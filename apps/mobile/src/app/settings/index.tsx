@@ -182,14 +182,20 @@ function ConfiguredSettingsRouteScreen() {
 
   const promptSignIn = useCallback(() => {
     Alert.alert(
-      "Request T3 Cloud access",
-      "Live Activity updates require approved T3 Cloud access so relay can deliver updates to this device.",
+      "Sign in to Viper Connect",
+      "Live Activity updates require a Viper Connect account so relay can deliver updates to this device.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Continue", onPress: () => push("/settings/waitlist") },
+        {
+          text: "Sign in",
+          onPress: () => {
+            expandClerkSheet();
+            push("/settings/auth");
+          },
+        },
       ],
     );
-  }, [push]);
+  }, [expandClerkSheet, push]);
 
   const linkEnvironments = useCallback(async () => {
     if (!isSignedIn) {
@@ -315,13 +321,9 @@ function ConfiguredSettingsRouteScreen() {
 
   const openAccount = useCallback(() => {
     if (!isLoaded) return;
-    if (!isSignedIn) {
-      push("/settings/waitlist");
-      return;
-    }
     expandClerkSheet();
     push("/settings/auth");
-  }, [expandClerkSheet, isLoaded, isSignedIn, push]);
+  }, [expandClerkSheet, isLoaded, push]);
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
