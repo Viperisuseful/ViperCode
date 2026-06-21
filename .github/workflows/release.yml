@@ -68,11 +68,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # pnpm's content-addressable store can strip the executable bit from the
-      # prebuilt Hermes compiler; release builds invoke it (debug skips Hermes
-      # AOT), so restore +x before assembling.
+      # Diagnose + fix the prebuilt Hermes compiler that release builds invoke
+      # (debug/preview skip Hermes AOT). pnpm's store layout can leave it
+      # non-executable or as a dangling symlink.
       - name: Ensure Hermes compiler is executable
-        run: find node_modules -type f -path "*/sdks/hermesc/*-bin/hermesc" -exec chmod +x {} +
+        run: |
+          echo "--- hermesc candidates ---"
+          find node_modules -path "*sdks/hermesc*hermesc" 2>/dev/null | head -20
+          hermesc="$(find node_modules -path "*/sdks/hermesc/linux64-bin/hermesc" 2>/dev/null | head -1)"
+          echo "resolved: '$hermesc'"
+          if [ -n "$hermesc" ]; then
+            ls -la "$hermesc"; readlink -f "$hermesc" || true; file "$hermesc" || true
+            real="$(readlink -f "$hermesc")"; chmod +x "$hermesc" "$real" 2>/dev/null || true
+            ls -la "$real"
+          else
+            echo "hermesc NOT FOUND"
+          fi
 
       - name: Prebuild Android native project
         working-directory: apps/mobile
