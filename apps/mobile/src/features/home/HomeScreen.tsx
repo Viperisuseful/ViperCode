@@ -10,7 +10,14 @@ import type {
 import * as Haptics from "expo-haptics";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -509,7 +516,9 @@ export function HomeScreen(props: HomeScreenProps) {
   return (
     <View className="flex-1 bg-screen">
       <ScrollView
-        contentInsetAdjustmentBehavior="never"
+        // iOS keeps automatic top+bottom insets; Android ignores this prop, so
+        // the floating transparent header is offset with explicit top padding.
+        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -517,7 +526,7 @@ export function HomeScreen(props: HomeScreenProps) {
         className="flex-1"
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: headerHeight + 8,
+          paddingTop: Platform.OS === "android" ? headerHeight + 8 : 8,
           paddingBottom: 24,
           gap: 20,
         }}
