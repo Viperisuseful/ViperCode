@@ -10,7 +10,14 @@ import type {
 import * as Haptics from "expo-haptics";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -22,6 +29,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "expo-router/build/react-navigation/elements";
 import { useThemeColor } from "../../lib/useThemeColor";
 
 import { AppText as Text } from "../../components/AppText";
@@ -440,6 +448,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const accentColor = useThemeColor("--color-icon-muted");
 
   const toggleExpanded = useCallback((key: string) => {
@@ -507,6 +516,8 @@ export function HomeScreen(props: HomeScreenProps) {
   return (
     <View className="flex-1 bg-screen">
       <ScrollView
+        // iOS keeps automatic top+bottom insets; Android ignores this prop, so
+        // the floating transparent header is offset with explicit top padding.
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
@@ -515,7 +526,7 @@ export function HomeScreen(props: HomeScreenProps) {
         className="flex-1"
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: 8,
+          paddingTop: Platform.OS === "android" ? headerHeight + 8 : 8,
           paddingBottom: 24,
           gap: 20,
         }}
