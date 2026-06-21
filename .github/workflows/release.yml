@@ -61,7 +61,7 @@ jobs:
 
   android:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_target == 'all' || inputs.build_target == 'android' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ${{ vars.VIPERCODE_ANDROID_RELEASE_RUNNER || 'warp-ubuntu-2404-x64-8x' }}
     env:
       EXPO_PUBLIC_VIPERCODE_CLERK_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_VIPERCODE_CLERK_PUBLISHABLE_KEY }}
       EXPO_PUBLIC_VIPERCODE_CLERK_JWT_TEMPLATE: ${{ secrets.EXPO_PUBLIC_VIPERCODE_CLERK_JWT_TEMPLATE }}
