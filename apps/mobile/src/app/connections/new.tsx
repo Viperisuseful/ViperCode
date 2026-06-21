@@ -156,14 +156,22 @@ export default function ConnectionsNewRouteScreen() {
         <View collapsable={false} className="gap-5">
           {showScanner ? (
             cameraPermission?.granted ? (
-              <View
-                className="overflow-hidden rounded-[24px]"
-                style={{ borderCurve: "continuous" }}
-              >
-                <CameraView
-                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                  onBarcodeScanned={handleQrScan}
-                  style={{ aspectRatio: 1, width: "100%" }}
+              <View collapsable={false} className="gap-3">
+                <View
+                  className="overflow-hidden rounded-[24px]"
+                  style={{ borderCurve: "continuous" }}
+                >
+                  <CameraView
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                    onBarcodeScanned={handleQrScan}
+                    style={{ aspectRatio: 1, width: "100%" }}
+                  />
+                </View>
+                <ConnectionSheetButton
+                  icon="keyboard"
+                  label="Enter manually"
+                  tone="secondary"
+                  onPress={closeScanner}
                 />
               </View>
             ) : (
@@ -233,6 +241,15 @@ export default function ConnectionsNewRouteScreen() {
                 tone="primary"
                 onPress={() => {
                   void handleSubmit();
+                }}
+              />
+
+              <ConnectionSheetButton
+                icon="qrcode.viewfinder"
+                label="Scan QR code"
+                tone="secondary"
+                onPress={() => {
+                  void openScanner();
                 }}
               />
             </View>

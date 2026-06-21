@@ -22,6 +22,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "expo-router/build/react-navigation/elements";
 import { useThemeColor } from "../../lib/useThemeColor";
 
 import { AppText as Text } from "../../components/AppText";
@@ -440,6 +441,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => new Set());
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const accentColor = useThemeColor("--color-icon-muted");
 
   const toggleExpanded = useCallback((key: string) => {
@@ -507,7 +509,7 @@ export function HomeScreen(props: HomeScreenProps) {
   return (
     <View className="flex-1 bg-screen">
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
+        contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -515,7 +517,7 @@ export function HomeScreen(props: HomeScreenProps) {
         className="flex-1"
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingTop: 8,
+          paddingTop: headerHeight + 8,
           paddingBottom: 24,
           gap: 20,
         }}
