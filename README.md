@@ -33,7 +33,7 @@ Install and authenticate at least one provider before use:
 
 - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
 - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-- GitHub Copilot: make the `copilot` CLI available, then sign in from **Settings -> Providers**
+- GitHub Copilot: install [GitHub Copilot CLI](https://github.com/github/copilot-cli) and run `copilot login`
 - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 
 Viper Code uses your existing CLI setup. Provider settings also support multiple named instances, custom homes, custom env vars, sensitive secret storage, model favorites, and provider-specific model controls.
@@ -71,14 +71,6 @@ vp run typecheck
 vp test
 ```
 
-## Releases
-
-Pushing a `v*` tag runs the release workflow. It publishes the Windows installer, updater files, and Android APK to GitHub Releases.
-
-The desktop app uses `electron-updater`, so public releases in this repo are also the update feed.
-
-Release assets can appear as separate jobs finish. If the newest release only shows the Windows installer and updater files, wait for the Android job to complete or use the newest release that already contains `viper-code-mobile.apk`.
-
 ## Docs
 
 - [Documentation index](./docs/README.md)
@@ -90,4 +82,4 @@ Release assets can appear as separate jobs finish. If the newest release only sh
 
 ## Fork history
 
-Viper Code started as a fork of the MIT-licensed [T3 Code](https://github.com/pingdotgg/t3code). This fork keeps the small agent-GUI idea, but now has Viper branding, GitHub Copilot, Viper Connect, Android support, provider instances, and a Windows-first release path.
+ViperCode started from an MIT-licensed upstream fork. This project keeps the small agent-GUI idea, but now has Viper branding, GitHub Copilot, Viper Connect, Android support, provider instances, and a Windows-first release path.
