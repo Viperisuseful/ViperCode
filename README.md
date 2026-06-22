@@ -6,12 +6,26 @@ This is still early WIP. Expect bugs.
 
 ## Installation
 
-Grab the latest build from [Releases](https://github.com/quickrunlab/ViperCode/releases):
+Grab builds from [GitHub Releases](https://github.com/quickrunlab/ViperCode/releases).
 
-- Windows: `Viper-Code-x.y.z-x64.exe`
-- Android: `viper-code-mobile.apk`
+### Windows Desktop
+
+Download and run the latest `Viper-Code-x.y.z-x64.exe` installer.
 
 Windows builds are unsigned for now, so SmartScreen may show "Windows protected your PC" on first install. Click **More info** -> **Run anyway**.
+
+### Android Mobile App
+
+The Android app is distributed as an APK release asset named `viper-code-mobile.apk`.
+
+1. Download `viper-code-mobile.apk` from the newest release that includes it.
+2. Copy it to your Android device, or download it directly on the device.
+3. Open the APK and allow "Install unknown apps" for your browser or file manager if Android asks.
+4. Open Viper Code, sign in with the same Viper Connect account used on desktop, then select your linked environment.
+
+The mobile app connects to an existing desktop/server environment; it does not run agents locally. To link an environment, open the desktop app and go to **Settings -> Connections -> Viper Connect**. If your environment is not listed on mobile, create a pairing link or QR code from **Settings -> Connections -> Authorized clients**.
+
+If Android refuses to install over an older APK, uninstall the old mobile app first and install the new APK again. This can happen when switching between preview/debug and release-signed builds.
 
 ## Providers
 
@@ -62,6 +76,8 @@ vp test
 Pushing a `v*` tag runs the release workflow. It publishes the Windows installer, updater files, and Android APK to GitHub Releases.
 
 The desktop app uses `electron-updater`, so public releases in this repo are also the update feed.
+
+Release assets can appear as separate jobs finish. If the newest release only shows the Windows installer and updater files, wait for the Android job to complete or use the newest release that already contains `viper-code-mobile.apk`.
 
 ## Docs
 
