@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -63,6 +63,8 @@ interface AntigravitySessionContext {
   readonly sessionId: string;
   readonly turns: Array<AntigravityTurnSnapshot>;
   readonly pendingPermissions: Set<string>;
+  /** requestId → original request type, so `request.resolved` keeps its type. */
+  readonly pendingPermissionTypes: Map<string, CanonicalRequestType>;
   readonly pendingUserInputs: Set<string>;
   activeTurnId: TurnId | undefined;
   closed: boolean;
@@ -88,12 +90,6 @@ type EventBaseInput = {
 };
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-
-let generatedIdCounter = 0;
-const nextLocalId = (prefix: string): string => {
-  generatedIdCounter += 1;
-  return `${prefix}-${generatedIdCounter.toString(36)}`;
-};
 
 function defaultBridgePath(): string {
   return fileURLToPath(
@@ -399,6 +395,13 @@ export const makeAntigravityAdapter = (
     const bridgeRef = yield* Ref.make<AntigravityBridgeContext | undefined>(undefined);
     const boundInstanceId = options.instanceId;
 
+    // Per-instance id counter so two adapter instances never share state.
+    let localIdCounter = 0;
+    const nextLocalId = (prefix: string): string => {
+      localIdCounter += 1;
+      return `${prefix}-${localIdCounter.toString(36)}`;
+    };
+
     const buildEventBase = (input: EventBaseInput) =>
       Effect.all({
         createdAt: nowIso,
@@ -639,6 +642,8 @@ export const makeAntigravityAdapter = (
         case "permission_requested": {
           context.pendingPermissions.add(event.requestId);
           const title = event.title ?? "Tool request";
+          const requestType = requestTypeForTool(title);
+          context.pendingPermissionTypes.set(event.requestId, requestType);
           yield* updateProviderSession(context, { status: "running" });
           yield* emit({
             ...(yield* buildEventBase({
@@ -649,7 +654,7 @@ export const makeAntigravityAdapter = (
             })),
             type: "request.opened",
             payload: {
-              requestType: requestTypeForTool(title),
+              requestType,
               detail: event.detail ?? title,
               args: event.toolCall ?? event.options,
             },
@@ -657,8 +662,10 @@ export const makeAntigravityAdapter = (
           break;
         }
 
-        case "permission_resolved":
+        case "permission_resolved": {
           context.pendingPermissions.delete(event.requestId);
+          const requestType = context.pendingPermissionTypes.get(event.requestId) ?? "unknown";
+          context.pendingPermissionTypes.delete(event.requestId);
           yield* emit({
             ...(yield* buildEventBase({
               threadId,
@@ -667,11 +674,12 @@ export const makeAntigravityAdapter = (
             })),
             type: "request.resolved",
             payload: {
-              requestType: "unknown",
+              requestType,
               decision: event.decision,
             },
           });
           break;
+        }
 
         case "user_input_requested":
           context.pendingUserInputs.add(event.requestId);
@@ -719,10 +727,12 @@ export const makeAntigravityAdapter = (
           break;
 
         case "conversation_id_changed":
-          context.session = {
-            ...context.session,
+          // Route through updateProviderSession so the durable id (often learned
+          // mid-first-turn, after sendTurn already returned) lands on the live
+          // session the runtime persists, with a consistent updatedAt.
+          yield* updateProviderSession(context, {
             resumeCursor: resumeCursor(event.conversationId, context.turns.length),
-          };
+          });
           break;
 
         case "turn_completed": {
@@ -877,6 +887,8 @@ export const makeAntigravityAdapter = (
       const model = input.modelSelection?.model;
       const incomingConversationId = conversationIdFromResumeCursor(input.resumeCursor);
       const saveDir = join(serverConfig.stateDir, "antigravity", String(boundInstanceId));
+      // Ensure the SDK's persistence directory exists before it tries to write.
+      yield* Effect.sync(() => mkdirSync(saveDir, { recursive: true })).pipe(Effect.ignore);
       const appDataDir = settings.homePath.trim();
       const result = yield* requestBridge("start_session", input.threadId, (bridge) =>
         bridge.request({
@@ -920,6 +932,7 @@ export const makeAntigravityAdapter = (
         sessionId: input.threadId,
         turns: [],
         pendingPermissions: new Set(),
+        pendingPermissionTypes: new Map(),
         pendingUserInputs: new Set(),
         activeTurnId: undefined,
         closed: false,
@@ -1050,16 +1063,9 @@ export const makeAntigravityAdapter = (
           ...(turnId ? { turnId } : {}),
         }),
       );
-      const activeTurnId = turnId ?? context.activeTurnId;
-      if (activeTurnId) {
-        yield* emit({
-          ...(yield* buildEventBase({ threadId, turnId: activeTurnId })),
-          type: "turn.aborted",
-          payload: {
-            reason: "Interrupted by user.",
-          },
-        });
-      }
+      // The bridge cancels the in-flight turn and emits `turn_completed`
+      // (stopReason "cancelled"), which becomes the single terminal `turn.completed`.
+      // Emitting `turn.aborted` here too would double-terminate the turn.
     });
 
     const respondToRequest: ProviderAdapterShape<ProviderAdapterError>["respondToRequest"] =

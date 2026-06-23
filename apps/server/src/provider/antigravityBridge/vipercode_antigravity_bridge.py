@@ -104,6 +104,10 @@ def _error_info(exc: BaseException) -> Dict[str, str]:
     if isinstance(exc, BridgeRequestError):
         return {"message": exc.message, "code": exc.code}
     message = str(exc) or exc.__class__.__name__
+    class_name = exc.__class__.__name__.lower()
+    # Class-name checks first: more stable than English message wording.
+    if "defaultcredentials" in class_name or "refresherror" in class_name:
+        return {"message": message, "code": "oauth_required"}
     lowered = message.lower()
     if "default credentials" in lowered or "could not automatically determine credentials" in lowered:
         return {"message": message, "code": "oauth_required"}
@@ -395,16 +399,46 @@ def _load_cli_oauth_access_token(request: Dict[str, Any]) -> tuple[str, str]:
     )
 
 
-def _models_for_endpoint(types: Any, model_name: Optional[str], endpoint: Any) -> list[Any]:
-    text_name = model_name or "gemini-3.5-flash"
-    return [
-        types.ModelTarget(name=text_name, types=[types.ModelType.TEXT], endpoint=endpoint),
-        types.ModelTarget(
-            name="gemini-3.1-flash-image-preview",
-            types=[types.ModelType.IMAGE],
-            endpoint=endpoint,
-        ),
-    ]
+def _models_for_endpoint(
+    types: Any,
+    model_name: Optional[str],
+    endpoint: Any,
+    image_model: Optional[str] = None,
+) -> list[Any]:
+    text_name = model_name or _env_first("ANTIGRAVITY_DEFAULT_MODEL") or "gemini-3.5-flash"
+    models = [types.ModelTarget(name=text_name, types=[types.ModelType.TEXT], endpoint=endpoint)]
+    # The image target is opt-in: a wrong/renamed image model name would break
+    # the endpoint, so only register it when explicitly configured.
+    if image_model:
+        models.append(
+            types.ModelTarget(name=image_model, types=[types.ModelType.IMAGE], endpoint=endpoint)
+        )
+    return models
+
+
+def _accepted_kwargs(target: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop kwargs the target does not accept, unless it takes ``**kwargs``.
+
+    Pydantic models expose a field-based ``__signature__`` (no VAR_KEYWORD), so
+    this filters config options the installed SDK build does not support instead
+    of raising ``TypeError`` and failing every session.
+    """
+    try:
+        signature = inspect.signature(target)
+    except (TypeError, ValueError):
+        return dict(kwargs)
+    parameters = list(signature.parameters.values())
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+        return dict(kwargs)
+    accepted = {
+        p.name
+        for p in parameters
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    dropped = sorted(key for key in kwargs if key not in accepted)
+    if dropped:
+        _log(f"LocalAgentConfig ignoring unsupported kwargs: {', '.join(dropped)}")
+    return {key: value for key, value in kwargs.items() if key in accepted}
 
 
 @dataclass
@@ -664,6 +698,7 @@ class Bridge:
         model_name = model.strip() if isinstance(model, str) and model.strip() else None
         if model_name:
             config_kwargs["model"] = model_name
+        image_model = _request_first(request, "imageModel", "ANTIGRAVITY_IMAGE_MODEL")
         auth_mode = str(request.get("authMode") or "google-oauth").strip() or "google-oauth"
         if auth_mode in {"google-oauth", "vertex-adc", "adc", "oauth"}:
             project = _request_first(
@@ -706,7 +741,7 @@ class Bridge:
                     http_headers={"Authorization": f"Bearer {access_token}"},
                 )
                 config_kwargs.pop("model", None)
-                config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
+                config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint, image_model)
         elif auth_mode in {"agy-oauth", "cli-oauth", "antigravity-cli-oauth"}:
             access_token, _profile_path = _load_cli_oauth_access_token(request)
             project = _request_first(
@@ -735,7 +770,7 @@ class Bridge:
                 ) or "https://generativelanguage.googleapis.com"
                 endpoint = types.GeminiAPIEndpoint(base_url=base_url, http_headers=headers)
             config_kwargs.pop("model", None)
-            config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
+            config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint, image_model)
         elif auth_mode in {"api-key", "gemini-api-key"}:
             pass
         elif auth_mode == "auto":
@@ -771,7 +806,7 @@ class Bridge:
                         http_headers={"Authorization": f"Bearer {access_token}"},
                     )
                     config_kwargs.pop("model", None)
-                    config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
+                    config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint, image_model)
                 except BridgeRequestError:
                     pass
         else:
@@ -789,7 +824,7 @@ class Bridge:
         if isinstance(app_data_dir, str) and app_data_dir.strip():
             config_kwargs["app_data_dir"] = app_data_dir.strip()
 
-        agent = Agent(LocalAgentConfig(**config_kwargs))
+        agent = Agent(LocalAgentConfig(**_accepted_kwargs(LocalAgentConfig, config_kwargs)))
         session = BridgeSession(
             session_id=session_id,
             cwd=cwd,
@@ -1047,24 +1082,43 @@ class Bridge:
         sdk_history_rolled_back = sdk_rollback_method is not None
         rollback_mode = "sdk" if sdk_rollback_method is not None else "local-history"
         if sdk_rollback_method is None:
-            try:
-                conversation = getattr(session.agent, "conversation", None)
-                turn_indices = getattr(conversation, "_turn_start_indices", None)
-                steps = getattr(conversation, "_steps", None)
-                compaction_indices = getattr(conversation, "_compaction_indices", None)
-                if isinstance(turn_indices, list) and isinstance(steps, list):
-                    if kept_count == 0:
-                        conversation.clear_history()
+            conversation = getattr(session.agent, "conversation", None)
+            if conversation is not None and kept_count == 0:
+                # Full reset: clear_history() is a documented public API in this
+                # SDK build. Done independently of any private fields so a future
+                # internal rename never breaks the most common rollback case.
+                clear_history = getattr(conversation, "clear_history", None)
+                if callable(clear_history):
+                    try:
+                        clear_history()
                         sdk_history_rolled_back = True
-                    elif kept_count < len(turn_indices):
+                        rollback_mode = "sdk-clear"
+                    except Exception as exc:
+                        _log(f"clear_history failed, keeping local-only: {exc}")
+            elif conversation is not None and kept_count > 0:
+                # No public partial-truncate exists in this SDK build, so mirror
+                # the SDK's own _enforce_max_history bookkeeping. Every private
+                # field is hasattr/try guarded: if any is renamed upstream the
+                # rollback degrades to local-only (turn snapshot already trimmed)
+                # instead of raising or silently corrupting state.
+                try:
+                    steps = getattr(conversation, "_steps", None)
+                    turn_indices = getattr(conversation, "_turn_start_indices", None)
+                    compaction_indices = getattr(conversation, "_compaction_indices", None)
+                    if (
+                        isinstance(steps, list)
+                        and isinstance(turn_indices, list)
+                        and kept_count < len(turn_indices)
+                    ):
                         boundary = turn_indices[kept_count]
                         del steps[boundary:]
                         del turn_indices[kept_count:]
                         if isinstance(compaction_indices, list):
                             compaction_indices[:] = [idx for idx in compaction_indices if idx < boundary]
                         sdk_history_rolled_back = True
-            except Exception as exc:
-                _log(f"local history rollback failed: {exc}")
+                        rollback_mode = "sdk-internal"
+                except Exception as exc:
+                    _log(f"sdk partial-history rollback failed, keeping local-only: {exc}")
         return {
             "threadId": session.session_id,
             "conversationId": session.conversation_id,
@@ -1202,6 +1256,11 @@ async def async_main() -> int:
     bridge = Bridge()
     bridge.loop = asyncio.get_running_loop()
     _log("started")
+    # Dispatch each request as a task so a slow handler (e.g. start_session
+    # blocking on network auth) does not stall replies, interrupts, or stops for
+    # other in-flight requests sharing this bridge. Responses are correlated by
+    # id, so interleaving on stdout is fine.
+    pending: set[asyncio.Task[None]] = set()
     try:
         async for raw_line in _read_stdin_lines():
             line = raw_line.strip()
@@ -1215,8 +1274,12 @@ async def async_main() -> int:
             if not isinstance(request, dict):
                 _log(f"ignoring non-object request: {request!r}")
                 continue
-            await bridge.handle(request)
+            task = asyncio.create_task(bridge.handle(request))
+            pending.add(task)
+            task.add_done_callback(pending.discard)
     finally:
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         await bridge.stop_all()
         _log("stdin closed, exiting")
     return 0
