@@ -1,5 +1,5 @@
 import { useColorScheme } from "react-native";
-import { Path, Svg } from "react-native-svg";
+import { Defs, LinearGradient, Path, Stop, Svg } from "react-native-svg";
 
 type ProviderIconProps = {
   readonly provider: string | null | undefined;
@@ -9,6 +9,34 @@ type ProviderIconProps = {
 export function ProviderIcon(props: ProviderIconProps) {
   const isDarkMode = useColorScheme() === "dark";
   const size = props.size ?? 16;
+
+  if (props.provider === "antigravity") {
+    // Gemini mark (the former desktop "coming soon" logo) used for Antigravity.
+    // Star silhouette as a single gradient-filled path — no SVG filters, so it
+    // renders reliably in react-native-svg.
+    return (
+      <Svg width={size} height={size} viewBox="0 0 296 298" fill="none">
+        <Defs>
+          <LinearGradient
+            id="antigravity-gemini"
+            x1="0"
+            y1="0"
+            x2="296"
+            y2="298"
+            gradientUnits="userSpaceOnUse"
+          >
+            <Stop offset="0" stopColor="#4285F4" />
+            <Stop offset="0.5" stopColor="#9B72CB" />
+            <Stop offset="1" stopColor="#D96570" />
+          </LinearGradient>
+        </Defs>
+        <Path
+          fill="url(#antigravity-gemini)"
+          d="M141.201 4.886c2.282-6.17 11.042-6.071 13.184.148l5.985 17.37a184.004 184.004 0 0 0 111.257 113.049l19.304 6.997c6.143 2.227 6.156 10.91.02 13.155l-19.35 7.082a184.001 184.001 0 0 0-109.495 109.385l-7.573 20.629c-2.241 6.105-10.869 6.121-13.133.025l-7.908-21.296a184 184 0 0 0-109.02-108.658l-19.698-7.239c-6.102-2.243-6.118-10.867-.025-13.132l20.083-7.467A183.998 183.998 0 0 0 133.291 26.28l7.91-21.394Z"
+        />
+      </Svg>
+    );
+  }
 
   if (props.provider === "claudeAgent") {
     return (

@@ -1,5 +1,5 @@
 import { ProviderDriverKind } from "@vipercode/contracts";
-import { ClaudeAI, GithubCopilotIcon, Icon, OpenAI, OpenCodeIcon } from "../Icons";
+import { ClaudeAI, Gemini, GithubCopilotIcon, Icon, OpenAI, OpenCodeIcon } from "../Icons";
 import { PROVIDER_OPTIONS } from "../../session-logic";
 
 export const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>> = {
@@ -7,6 +7,8 @@ export const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>
   [ProviderDriverKind.make("claudeAgent")]: ClaudeAI,
   [ProviderDriverKind.make("githubCopilot")]: GithubCopilotIcon,
   [ProviderDriverKind.make("opencode")]: OpenCodeIcon,
+  // Antigravity uses the Gemini mark (the former "coming soon" logo).
+  [ProviderDriverKind.make("antigravity")]: Gemini,
 };
 
 function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
