@@ -72,10 +72,21 @@ gcloud auth application-default login
 ```
 
 The SDK's OAuth/ADC path uses `LocalAgentConfig(vertex=True, project=...,
-location=...)`. Antigravity CLI OAuth token profiles are stored for the CLI, but
-the current Python SDK does not expose a supported way to reuse those token
-profiles directly. API-key auth remains available as an explicit fallback by
-setting Auth mode to `api-key` and providing `GEMINI_API_KEY`.
+location=...)`.
+
+Viper Code also supports best-effort Antigravity CLI OAuth profile reuse. If
+Auth mode is `google-oauth` and project/location are not configured, or Auth
+mode is explicitly set to `agy-oauth`, the bridge looks for a readable CLI OAuth
+profile at `ANTIGRAVITY_CLI_OAUTH_PROFILE`,
+`ANTIGRAVITY_CLI_OAUTH_TOKEN_FILE`, `GEMINI_OAUTH_CREDS`,
+`<Antigravity home path>/oauth_creds.json`,
+`<Antigravity home path>/antigravity-cli/oauth_creds.json`,
+`~/.gemini/oauth_creds.json`, or `~/.gemini/antigravity-cli/oauth_creds.json`.
+Only the access token is used and it is never logged. Expired token profiles
+return a setup error; run `agy` again to refresh sign-in.
+
+API-key auth remains available as an explicit fallback by setting Auth mode to
+`api-key` and providing `GEMINI_API_KEY`.
 
 ## Configure The Provider In Viper Code
 
@@ -93,8 +104,10 @@ GCP location: us-central1
 
 Other settings:
 
-- **Auth mode** — `google-oauth` by default. This uses SDK Vertex/ADC auth.
-  Use `api-key` only when you explicitly want `GEMINI_API_KEY` fallback.
+- **Auth mode** — `google-oauth` by default. This uses SDK Vertex/ADC auth when
+  project/location are set, otherwise it can reuse a readable `agy` OAuth
+  profile. Use `agy-oauth` to force CLI profile reuse, or `api-key` only when
+  you explicitly want `GEMINI_API_KEY` fallback.
 - **GCP project** — required for OAuth/ADC mode unless `GOOGLE_CLOUD_PROJECT`
   or `GCLOUD_PROJECT` is set in the provider environment.
 - **GCP location** — Vertex/Gemini Enterprise location for OAuth/ADC mode.
@@ -111,7 +124,9 @@ Other settings:
   access outside the workspace.
 
 The provider card shows whether the CLI and SDK are detected, the SDK version,
-and setup guidance when something is missing.
+and setup guidance when something is missing. When `agy models` returns model
+names, Viper Code uses that live list as selectable models; otherwise it falls
+back to the SDK defaults plus custom models.
 
 ## Multiple Instances
 
@@ -141,9 +156,9 @@ Non-workspace access and `always-proceed` are never enabled silently.
   at the interpreter where it is installed.
 - **Wrong Python detected.** Set `Python path` to an absolute path (for example
   `/usr/bin/python3` or a virtualenv's `python`).
-- **OAuth/ADC setup issues.** Set GCP project/location and run
-  `gcloud auth application-default login`. CLI sign-in alone is useful for
-  `agy`, but the Python SDK uses ADC for OAuth-backed model calls.
+- **OAuth setup issues.** Set GCP project/location and run
+  `gcloud auth application-default login`, or run `agy` again to refresh a
+  readable CLI OAuth profile.
 - **API key fallback issues.** Set Auth mode to `api-key` and provide
   `GEMINI_API_KEY` in the provider or server environment.
 
@@ -151,10 +166,15 @@ Non-workspace access and `always-proceed` are never enabled silently.
 
 - SDK auth status is not yet machine-readable, so the card shows
   authentication as unknown even after setup.
-- Antigravity CLI OAuth token profiles are not currently reusable by the Python
-  SDK; Viper Code uses the SDK's supported OAuth/ADC path instead.
-- SDK checkpoint rollback is not exposed in this SDK build, so Viper Code can
-  read thread snapshots and resume by conversation ID but cannot roll back an
-  Antigravity conversation in-place.
+- CLI OAuth profile reuse depends on a readable local token profile. Systems
+  where `agy` stores tokens only in an OS keyring may still need OAuth/ADC
+  project auth until Google exposes profile reuse in the SDK.
+- SDK checkpoint rollback is not exposed in this SDK build. Viper Code performs
+  local-history rollback by trimming its provider turn snapshot and SDK
+  conversation history where the SDK keeps it in memory. This is enough for
+  Viper Code UI rollback, but it is not a remote Antigravity checkpoint restore.
+- The current SDK build does not expose a first-class model-list API. Viper Code
+  uses `agy models` when the CLI returns output, then falls back to SDK defaults
+  and custom models.
 - Updates are manual: re-run the CLI install script and
   `pip install --upgrade google-antigravity`.

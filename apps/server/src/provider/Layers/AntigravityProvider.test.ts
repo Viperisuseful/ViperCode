@@ -9,7 +9,10 @@ import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { AntigravitySettings } from "@vipercode/contracts";
-import { checkAntigravityProviderStatus } from "./AntigravityProvider.ts";
+import {
+  checkAntigravityProviderStatus,
+  parseAntigravityCliModels,
+} from "./AntigravityProvider.ts";
 
 const encoder = new TextEncoder();
 const decodeSettings = Schema.decodeSync(AntigravitySettings);
@@ -71,6 +74,22 @@ const probe = (
   );
 
 describe("checkAntigravityProviderStatus", () => {
+  it("parses agy models output as selectable display-name slugs", () => {
+    expect(
+      parseAntigravityCliModels(`
+Available models:
+  * Gemini 3.5 Flash (Medium)
+  * Gemini 3.5 Flash (High)
+  * Claude Sonnet 4.6 (Thinking)
+  * Gemini 3.5 Flash (High)
+`),
+    ).toEqual([
+      "Gemini 3.5 Flash (Medium)",
+      "Gemini 3.5 Flash (High)",
+      "Claude Sonnet 4.6 (Thinking)",
+    ]);
+  });
+
   it.effect("reports disabled without probing", () =>
     Effect.gen(function* () {
       const snapshot = yield* probe({ enabled: false }, () => ({ stdout: "" }));
@@ -82,10 +101,12 @@ describe("checkAntigravityProviderStatus", () => {
 
   it.effect("warns when OAuth/ADC is selected but project setup is incomplete", () =>
     Effect.gen(function* () {
-      const snapshot = yield* probe({}, (command) =>
+      const snapshot = yield* probe({}, (command, args) =>
         command === "python"
           ? { stdout: '{"sdkAvailable": true, "sdkVersion": "0.3.0"}' }
-          : { stdout: "agy version 1.2.3" },
+          : args[0] === "models"
+            ? { stdout: "" }
+            : { stdout: "agy version 1.2.3" },
       );
       expect(snapshot.installed).toBe(true);
       expect(snapshot.status).toBe("warning");
@@ -93,16 +114,18 @@ describe("checkAntigravityProviderStatus", () => {
       expect(snapshot.auth.status).toBe("unauthenticated");
       expect(snapshot.auth.type).toBe("google-oauth");
       expect(snapshot.message).toContain("Using Python: python");
-      expect(snapshot.message).toContain("OAuth/ADC auth is selected");
+      expect(snapshot.message).toContain("OAuth auth is selected");
     }),
   );
 
   it.effect("reports ready when both CLI and SDK are present with OAuth/ADC project config", () =>
     Effect.gen(function* () {
-      const snapshot = yield* probe({ gcpProject: "viper-project" }, (command) =>
+      const snapshot = yield* probe({ gcpProject: "viper-project" }, (command, args) =>
         command === "python"
           ? { stdout: '{"sdkAvailable": true, "sdkVersion": "0.3.0"}' }
-          : { stdout: "agy version 1.2.3" },
+          : args[0] === "models"
+            ? { stdout: "" }
+            : { stdout: "agy version 1.2.3" },
       );
       expect(snapshot.installed).toBe(true);
       expect(snapshot.status).toBe("ready");
@@ -126,6 +149,29 @@ describe("checkAntigravityProviderStatus", () => {
       expect(snapshot.status).toBe("ready");
       expect(snapshot.auth.status).toBe("authenticated");
       expect(snapshot.auth.type).toBe("api-key");
+    }),
+  );
+
+  it.effect("uses agy models output when the CLI exposes a model list", () =>
+    Effect.gen(function* () {
+      const snapshot = yield* probe({ gcpProject: "viper-project" }, (command, args) =>
+        command === "python"
+          ? { stdout: '{"sdkAvailable": true, "sdkVersion": "0.3.0"}' }
+          : args[0] === "models"
+            ? {
+                stdout: [
+                  "Gemini 3.5 Flash (Medium)",
+                  "Gemini 3.1 Pro (High)",
+                  "Claude Sonnet 4.6 (Thinking)",
+                ].join("\n"),
+              }
+            : { stdout: "agy version 1.2.3" },
+      );
+      expect(snapshot.models.map((model) => model.slug)).toEqual([
+        "Gemini 3.5 Flash (Medium)",
+        "Gemini 3.1 Pro (High)",
+        "Claude Sonnet 4.6 (Thinking)",
+      ]);
     }),
   );
 

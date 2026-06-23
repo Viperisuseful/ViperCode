@@ -1,7 +1,7 @@
 # Antigravity Provider Implementation Plan
 
 Date: 2026-06-23
-Status: Implemented with SDK-auth and rollback limitations
+Status: Implemented with SDK auth, CLI OAuth compatibility, dynamic CLI model probing, and local-history rollback
 Scope: Add Google Antigravity as a first-party ViperCode provider, comparable to Codex, Claude, GitHub Copilot, and OpenCode.
 
 ## Implementation Update
@@ -27,8 +27,15 @@ Local SDK probing answered the main open questions:
   details are available through SDK hooks.
 - Cancellation goes through `ChatResponse.cancel()` / conversation cancel and
   is exposed as turn cancellation in ViperCode.
-- The installed SDK build does not expose checkpoint rollback, so
-  `rollbackThread` returns a typed unsupported error.
+- The installed SDK build does not expose backend checkpoint rollback.
+  `rollbackThread` now performs local-history rollback by trimming ViperCode
+  turn snapshots and SDK in-memory history where available.
+- The SDK does not expose direct `agy` profile reuse, but ViperCode now has a
+  guarded CLI OAuth compatibility path that reads a local token profile without
+  logging secrets.
+- The SDK does not expose a first-class model-list API in this build; ViperCode
+  probes `agy models` and falls back to SDK defaults/custom models when the CLI
+  returns no output.
 
 ## Goal
 
@@ -292,8 +299,9 @@ Continuation identity:
   - otherwise run a bridge probe that creates a read-only local agent and returns a typed auth failure if credentials are missing.
   - do not scrape interactive TUI output unless it is the only available option and tests cover it.
 - Models:
-  - prefer SDK-provided model list if exposed.
-  - else use defaults from docs/SDK examples and allow custom models.
+  - prefer `agy models` output when available.
+  - use defaults from docs/SDK examples and allow custom models when CLI output
+    is empty.
 - Update:
   - if `agy` has a native upgrade command, add a native maintenance resolver.
   - else provide manual update instructions using the official install scripts.
@@ -369,8 +377,10 @@ CLI compatibility:
 
 Rollback:
 
-- If SDK exposes checkpoint/rewind APIs, implement `rollbackThread`.
-- Else return the available thread snapshot and surface rollback as unsupported for Antigravity in a clear typed way.
+- If SDK exposes checkpoint/rewind APIs, replace local-history rollback with
+  backend checkpoint rollback.
+- Until then, trim ViperCode turn snapshots and SDK in-memory history where
+  available.
 - Do not shell out to `/rewind` in the TUI for provider rollback.
 
 ### Layer 7: Attachments And Multimodal Input
@@ -681,10 +691,10 @@ Manual verification:
 
 ## Open Questions
 
-- Does the SDK expose a stable list-models API, or should ViperCode rely on defaults plus custom models? Current implementation uses SDK-observed defaults plus custom models.
+- Does the SDK expose a stable list-models API, or should ViperCode rely on CLI output plus defaults/custom models? Current implementation uses `agy models` when available, then SDK-observed defaults plus custom models.
 - Can SDK cancellation interrupt an already-running local tool call, or only stop future model/tool work? The adapter calls SDK cancellation; exact in-tool granularity still needs a live authenticated turn.
 - Are tool-call hooks detailed enough to classify file edits, shell, MCP, web, and subagents without fragile name matching? Current implementation uses SDK names plus hook payloads; live SDK traces should refine classification.
-- Can the SDK use the same keyring/session as `agy`, or does it require separate ADC/Google auth in some configurations? Local testing and upstream issue research indicate CLI OAuth token profiles are not exposed to the Python SDK; ViperCode uses the SDK-supported OAuth/ADC path.
+- Can the SDK use the same keyring/session as `agy`, or does it require separate ADC/Google auth in some configurations? Current implementation supports SDK OAuth/ADC and a guarded CLI OAuth token-profile compatibility path; OS-keyring-only CLI profiles may still require ADC until the SDK exposes first-class profile reuse.
 - Is there an official `agy --version`, `agy auth status`, or JSON status command not surfaced in the current docs?
 - Should ViperCode eventually offer a pure CLI terminal mode using `agy -p` for lightweight one-shot prompts, separate from the full SDK provider?
 

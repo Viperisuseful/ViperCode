@@ -1162,13 +1162,30 @@ export const makeAntigravityAdapter = (
       "rollbackAntigravityThread",
     )(function* (threadId, numTurns) {
       const context = ensureSessionContext(sessions, threadId);
-      yield* requestBridge("rollback_thread", threadId, (bridge) =>
+      const result = yield* requestBridge("rollback_thread", threadId, (bridge) =>
         bridge.request({
           type: "rollback_thread",
           sessionId: context.sessionId,
           numTurns,
         }),
       );
+      if (numTurns >= context.turns.length) {
+        context.turns.splice(0, context.turns.length);
+      } else {
+        context.turns.splice(context.turns.length - numTurns, numTurns);
+      }
+      if (result && typeof result === "object") {
+        const record = result as Record<string, unknown>;
+        const conversationId = conversationIdFromBridgeResult(record);
+        const turnCount =
+          typeof record.turnCount === "number" ? record.turnCount : context.turns.length;
+        if (conversationId) {
+          context.session = {
+            ...context.session,
+            resumeCursor: resumeCursor(conversationId, turnCount),
+          };
+        }
+      }
       return yield* readThread(threadId);
     });
 

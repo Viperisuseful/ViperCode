@@ -14,7 +14,9 @@ import asyncio
 import json
 import mimetypes
 import os
+from pathlib import Path
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Optional, Sequence
@@ -245,6 +247,115 @@ def _request_first(request: Dict[str, Any], key: str, *env_names: str) -> Option
     return _env_first(*env_names)
 
 
+def _oauth_profile_candidates(request: Dict[str, Any]) -> list[Path]:
+    candidates: list[Path] = []
+    explicit = _request_first(
+        request,
+        "oauthProfilePath",
+        "ANTIGRAVITY_CLI_OAUTH_PROFILE",
+        "ANTIGRAVITY_CLI_OAUTH_TOKEN_FILE",
+        "GEMINI_OAUTH_CREDS",
+    )
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+
+    roots: list[Path] = []
+    for raw in (
+        request.get("appDataDir"),
+        os.environ.get("ANTIGRAVITY_HOME"),
+        os.environ.get("GEMINI_CONFIG_DIR"),
+    ):
+        if isinstance(raw, str) and raw.strip():
+            roots.append(Path(raw.strip()).expanduser())
+    roots.append(Path.home() / ".gemini")
+
+    seen_roots: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key in seen_roots:
+            continue
+        seen_roots.add(key)
+        candidates.extend(
+            [
+                root / "oauth_creds.json",
+                root / "antigravity-cli" / "oauth_creds.json",
+                root / "antigravity-cli" / "antigravity-oauth-token",
+            ]
+        )
+
+    seen_paths: set[str] = set()
+    deduped: list[Path] = []
+    for path in candidates:
+        key = str(path)
+        if key not in seen_paths:
+            seen_paths.add(key)
+            deduped.append(path)
+    return deduped
+
+
+def _profile_expired(data: Dict[str, Any]) -> bool:
+    raw = data.get("expiry_date") or data.get("expires_at") or data.get("expiry")
+    if raw is None:
+        return False
+    try:
+        expiry = float(raw)
+    except (TypeError, ValueError):
+        return False
+    if expiry > 10_000_000_000:
+        expiry = expiry / 1000
+    return expiry <= time.time() + 60
+
+
+def _load_cli_oauth_access_token(request: Dict[str, Any]) -> tuple[str, str]:
+    expired_profile_found = False
+    for path in _oauth_profile_candidates(request):
+        try:
+            if not path.is_file():
+                continue
+            raw = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {"access_token": raw}
+        if not isinstance(data, dict):
+            continue
+        token = data.get("access_token") or data.get("accessToken") or data.get("token")
+        if not isinstance(token, str) or not token.strip():
+            continue
+        if _profile_expired(data):
+            expired_profile_found = True
+            continue
+        return token.strip(), str(path)
+
+    if expired_profile_found:
+        raise BridgeRequestError(
+            "Antigravity CLI OAuth profile was found but its access token is expired. "
+            "Run `agy` again to refresh sign-in, or configure OAuth/ADC project auth.",
+            "cli_oauth_profile_expired",
+        )
+    raise BridgeRequestError(
+        "Antigravity CLI OAuth profile was not found. Run `agy` to sign in, set "
+        "ANTIGRAVITY_CLI_OAUTH_PROFILE, or configure OAuth/ADC project auth.",
+        "cli_oauth_profile_not_found",
+    )
+
+
+def _models_for_endpoint(types: Any, model_name: Optional[str], endpoint: Any) -> list[Any]:
+    text_name = model_name or "gemini-3.5-flash"
+    return [
+        types.ModelTarget(name=text_name, types=[types.ModelType.TEXT], endpoint=endpoint),
+        types.ModelTarget(
+            name="gemini-3.1-flash-image-preview",
+            types=[types.ModelType.IMAGE],
+            endpoint=endpoint,
+        ),
+    ]
+
+
 @dataclass
 class BridgeSession:
     session_id: str
@@ -415,8 +526,9 @@ class Bridge:
             "workspaces": workspaces,
         }
         model = request.get("model")
-        if isinstance(model, str) and model.strip():
-            config_kwargs["model"] = model.strip()
+        model_name = model.strip() if isinstance(model, str) and model.strip() else None
+        if model_name:
+            config_kwargs["model"] = model_name
         auth_mode = str(request.get("authMode") or "google-oauth").strip() or "google-oauth"
         if auth_mode in {"google-oauth", "vertex-adc", "adc", "oauth"}:
             project = _request_first(
@@ -433,16 +545,62 @@ class Bridge:
                 "GOOGLE_VERTEX_LOCATION",
                 "GOOGLE_CLOUD_REGION",
             )
-            if not project or not location:
-                raise BridgeRequestError(
-                    "Google OAuth/ADC auth requires a GCP project and location. "
-                    "Set Antigravity provider gcpProject/gcpLocation or GOOGLE_CLOUD_PROJECT "
-                    "and GOOGLE_CLOUD_LOCATION, then run `gcloud auth application-default login`.",
-                    "oauth_setup_required",
+            if project and location:
+                config_kwargs["vertex"] = True
+                config_kwargs["project"] = project
+                config_kwargs["location"] = location
+            else:
+                try:
+                    access_token, _profile_path = _load_cli_oauth_access_token(request)
+                except BridgeRequestError as exc:
+                    raise BridgeRequestError(
+                        "Google OAuth auth requires either GCP project/location for ADC or a "
+                        "readable Antigravity CLI OAuth profile. Set gcpProject/gcpLocation and "
+                        "run `gcloud auth application-default login`, or run `agy` to refresh "
+                        "CLI sign-in.",
+                        "oauth_setup_required",
+                    ) from exc
+                base_url = _request_first(
+                    request,
+                    "geminiBaseUrl",
+                    "ANTIGRAVITY_GEMINI_BASE_URL",
+                    "GEMINI_API_BASE_URL",
+                ) or "https://generativelanguage.googleapis.com"
+                endpoint = types.GeminiAPIEndpoint(
+                    base_url=base_url,
+                    http_headers={"Authorization": f"Bearer {access_token}"},
                 )
-            config_kwargs["vertex"] = True
-            config_kwargs["project"] = project
-            config_kwargs["location"] = location
+                config_kwargs.pop("model", None)
+                config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
+        elif auth_mode in {"agy-oauth", "cli-oauth", "antigravity-cli-oauth"}:
+            access_token, _profile_path = _load_cli_oauth_access_token(request)
+            project = _request_first(
+                request,
+                "gcpProject",
+                "GOOGLE_CLOUD_PROJECT",
+                "GCLOUD_PROJECT",
+                "CLOUDSDK_CORE_PROJECT",
+            )
+            location = _request_first(
+                request,
+                "gcpLocation",
+                "GOOGLE_CLOUD_LOCATION",
+                "GOOGLE_VERTEX_LOCATION",
+                "GOOGLE_CLOUD_REGION",
+            )
+            headers = {"Authorization": f"Bearer {access_token}"}
+            if project and location:
+                endpoint = types.VertexEndpoint(project=project, location=location, http_headers=headers)
+            else:
+                base_url = _request_first(
+                    request,
+                    "geminiBaseUrl",
+                    "ANTIGRAVITY_GEMINI_BASE_URL",
+                    "GEMINI_API_BASE_URL",
+                ) or "https://generativelanguage.googleapis.com"
+                endpoint = types.GeminiAPIEndpoint(base_url=base_url, http_headers=headers)
+            config_kwargs.pop("model", None)
+            config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
         elif auth_mode in {"api-key", "gemini-api-key"}:
             pass
         elif auth_mode == "auto":
@@ -464,8 +622,28 @@ class Bridge:
                 config_kwargs["vertex"] = True
                 config_kwargs["project"] = project
                 config_kwargs["location"] = location
+            else:
+                try:
+                    access_token, _profile_path = _load_cli_oauth_access_token(request)
+                    base_url = _request_first(
+                        request,
+                        "geminiBaseUrl",
+                        "ANTIGRAVITY_GEMINI_BASE_URL",
+                        "GEMINI_API_BASE_URL",
+                    ) or "https://generativelanguage.googleapis.com"
+                    endpoint = types.GeminiAPIEndpoint(
+                        base_url=base_url,
+                        http_headers={"Authorization": f"Bearer {access_token}"},
+                    )
+                    config_kwargs.pop("model", None)
+                    config_kwargs["models"] = _models_for_endpoint(types, model_name, endpoint)
+                except BridgeRequestError:
+                    pass
         else:
-            raise BridgeRequestError(f"Unsupported Antigravity auth mode: {auth_mode}", "invalid_auth_mode")
+            if auth_mode not in {"api-key", "gemini-api-key"}:
+                raise BridgeRequestError(
+                    f"Unsupported Antigravity auth mode: {auth_mode}", "invalid_auth_mode"
+                )
         conversation_id = request.get("conversationId")
         if isinstance(conversation_id, str) and conversation_id.strip():
             config_kwargs["conversation_id"] = conversation_id.strip()
@@ -718,11 +896,42 @@ class Bridge:
         }
 
     async def rollback_thread(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        self.require_session(request)
-        raise BridgeRequestError(
-            "The Antigravity SDK does not expose checkpoint rollback in this build.",
-            "rollback_not_supported",
-        )
+        session = self.require_session(request)
+        if session.current_task is not None and not session.current_task.done():
+            raise BridgeRequestError("Cannot roll back while a turn is running.", "turn_in_progress")
+        num_turns = request.get("numTurns")
+        if not isinstance(num_turns, int) or num_turns < 1:
+            raise BridgeRequestError("rollback_thread requires a positive numTurns.", "invalid_request")
+        kept_count = max(0, len(session.turns) - num_turns)
+        session.turns = session.turns[:kept_count]
+        sdk_history_rolled_back = False
+        try:
+            conversation = getattr(session.agent, "conversation", None)
+            turn_indices = getattr(conversation, "_turn_start_indices", None)
+            steps = getattr(conversation, "_steps", None)
+            compaction_indices = getattr(conversation, "_compaction_indices", None)
+            if isinstance(turn_indices, list) and isinstance(steps, list):
+                if kept_count == 0:
+                    conversation.clear_history()
+                    sdk_history_rolled_back = True
+                elif kept_count < len(turn_indices):
+                    boundary = turn_indices[kept_count]
+                    del steps[boundary:]
+                    del turn_indices[kept_count:]
+                    if isinstance(compaction_indices, list):
+                        compaction_indices[:] = [idx for idx in compaction_indices if idx < boundary]
+                    sdk_history_rolled_back = True
+        except Exception as exc:
+            _log(f"local history rollback failed: {exc}")
+        return {
+            "threadId": session.session_id,
+            "conversationId": session.conversation_id,
+            "turnCount": len(session.turns),
+            "rolledBackTurns": num_turns,
+            "rollbackMode": "local-history",
+            "sdkHistoryRolledBack": sdk_history_rolled_back,
+            "turns": session.turns,
+        }
 
     async def stop_session(self, request: Dict[str, Any]) -> Dict[str, Any]:
         session = self.require_session(request)

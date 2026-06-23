@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off
 /**
  * AntigravityProvider — status snapshot for the Antigravity provider.
  *
@@ -20,6 +21,8 @@ import {
   type ServerProviderAuth,
   type ServerProviderModel,
 } from "@vipercode/contracts";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -125,6 +128,46 @@ function firstSettingOrEnv(
   return trimmed.length > 0 ? trimmed : firstEnv(environment, ...names);
 }
 
+function antigravityOAuthProfileCandidates(
+  settings: AntigravitySettings,
+  environment: NodeJS.ProcessEnv,
+): ReadonlyArray<string> {
+  const explicit = firstEnv(
+    environment,
+    "ANTIGRAVITY_CLI_OAUTH_PROFILE",
+    "ANTIGRAVITY_CLI_OAUTH_TOKEN_FILE",
+    "GEMINI_OAUTH_CREDS",
+  );
+  const roots = [
+    settings.homePath.trim(),
+    firstEnv(environment, "ANTIGRAVITY_HOME", "GEMINI_CONFIG_DIR"),
+    environment.USERPROFILE ? join(environment.USERPROFILE, ".gemini") : undefined,
+    environment.HOME ? join(environment.HOME, ".gemini") : undefined,
+  ].filter(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.trim().length > 0,
+  );
+
+  const candidates = [
+    ...(explicit ? [explicit] : []),
+    ...roots.flatMap((root) => [
+      join(root, "oauth_creds.json"),
+      join(root, "antigravity-cli", "oauth_creds.json"),
+      join(root, "antigravity-cli", "antigravity-oauth-token"),
+    ]),
+  ];
+  return [...new Set(candidates)];
+}
+
+function hasAntigravityCliOAuthProfile(
+  settings: AntigravitySettings,
+  environment: NodeJS.ProcessEnv,
+): boolean {
+  return antigravityOAuthProfileCandidates(settings, environment).some((candidate) =>
+    existsSync(candidate),
+  );
+}
+
 function resolveAntigravityAuthStatus(
   settings: AntigravitySettings,
   environment: NodeJS.ProcessEnv,
@@ -134,6 +177,7 @@ function resolveAntigravityAuthStatus(
   readonly label: string;
 } {
   const authMode = settings.authMode.trim() || "google-oauth";
+  const hasCliOAuthProfile = hasAntigravityCliOAuthProfile(settings, environment);
   if (authMode === "api-key" || authMode === "gemini-api-key") {
     const hasApiKey = firstEnv(environment, "GEMINI_API_KEY", "GOOGLE_API_KEY") !== undefined;
     return {
@@ -146,6 +190,24 @@ function resolveAntigravityAuthStatus(
       setupWarning: hasApiKey
         ? undefined
         : "API-key auth is selected, but GEMINI_API_KEY is not set.",
+    };
+  }
+
+  if (["agy-oauth", "cli-oauth", "antigravity-cli-oauth"].includes(authMode)) {
+    return {
+      auth: {
+        status: hasCliOAuthProfile ? "unknown" : "unauthenticated",
+        type: "google-oauth",
+        label: hasCliOAuthProfile
+          ? "Antigravity CLI OAuth profile"
+          : "Antigravity CLI OAuth profile missing",
+      },
+      label: hasCliOAuthProfile
+        ? "Antigravity CLI OAuth profile"
+        : "Antigravity CLI OAuth setup incomplete",
+      setupWarning: hasCliOAuthProfile
+        ? undefined
+        : "CLI OAuth auth is selected, but no readable Antigravity OAuth profile was found. Run `agy` to sign in or set ANTIGRAVITY_CLI_OAUTH_PROFILE.",
     };
   }
 
@@ -165,18 +227,22 @@ function resolveAntigravityAuthStatus(
       "GOOGLE_CLOUD_REGION",
     );
     const label =
-      project && location ? `OAuth/ADC (${project}, ${location})` : "OAuth/ADC setup incomplete";
+      project && location
+        ? `OAuth/ADC (${project}, ${location})`
+        : hasCliOAuthProfile
+          ? "Antigravity CLI OAuth profile"
+          : "OAuth setup incomplete";
     return {
       auth: {
-        status: project && location ? "unknown" : "unauthenticated",
+        status: (project && location) || hasCliOAuthProfile ? "unknown" : "unauthenticated",
         type: "google-oauth",
         label,
       },
       label,
       setupWarning:
-        project && location
+        (project && location) || hasCliOAuthProfile
           ? undefined
-          : "OAuth/ADC auth is selected. Set GCP project/location and run `gcloud auth application-default login`; Antigravity CLI OAuth token profiles are not exposed through the Python SDK.",
+          : "OAuth auth is selected. Set GCP project/location and run `gcloud auth application-default login`, or run `agy` so ViperCode can reuse a readable CLI OAuth profile.",
     };
   }
 
@@ -191,12 +257,57 @@ function resolveAntigravityAuthStatus(
   };
 }
 
-const modelsFor = (settings: AntigravitySettings) =>
+export function parseAntigravityCliModels(output: string): ReadonlyArray<string> {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine
+      .trim()
+      .replace(/^[\s>*\-•●]+/u, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .trim();
+    if (
+      !line ||
+      /^usage\b/i.test(line) ||
+      /^flags?:?$/i.test(line) ||
+      /^agy\s+version\b/i.test(line)
+    ) {
+      continue;
+    }
+    if (/^(available\s+)?models?:?$/i.test(line)) {
+      continue;
+    }
+    if (line.includes("\t")) {
+      const [first] = line.split(/\t+/);
+      if (first) {
+        const trimmed = first.trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          names.push(trimmed);
+        }
+      }
+      continue;
+    }
+    if (!seen.has(line)) {
+      seen.add(line);
+      names.push(line);
+    }
+  }
+  return names;
+}
+
+function cliModelsFor(modelNames: ReadonlyArray<string>): ReadonlyArray<ServerProviderModel> {
+  return modelNames.map((name) => ({
+    slug: name,
+    name,
+    isCustom: false,
+    capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
+  }));
+}
+
+const modelsFor = (settings: AntigravitySettings, discoveredModels: ReadonlyArray<string> = []) =>
   providerModelsFromSettings(
-    // The SDK exposes these defaults as constants in this install, while the
-    // CLI model listing is not currently machine-readable. Custom models still
-    // pass through for new upstream releases.
-    BUILT_IN_ANTIGRAVITY_MODELS,
+    discoveredModels.length > 0 ? cliModelsFor(discoveredModels) : BUILT_IN_ANTIGRAVITY_MODELS,
     PROVIDER,
     settings.customModels,
     DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
@@ -355,6 +466,24 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
             : undefined;
     const cliInstalled = !cliMissing;
 
+    const discoveredModelNames =
+      cliInstalled && !cliFailedDetail
+        ? yield* runAntigravityCliCommand(settings, ["models"], environment).pipe(
+            Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+            Effect.result,
+            Effect.map((result) =>
+              Result.isSuccess(result) &&
+              Option.isSome(result.success) &&
+              result.success.value.code === 0
+                ? parseAntigravityCliModels(
+                    `${result.success.value.stdout}\n${result.success.value.stderr}`,
+                  )
+                : [],
+            ),
+          )
+        : [];
+    const dynamicModels = modelsFor(settings, discoveredModelNames);
+
     // SDK probe: importability of `google-antigravity` from the first candidate
     // Python interpreter that actually has the package installed.
     const sdk = yield* resolveAntigravityPythonProbe(settings, environment);
@@ -367,7 +496,7 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
         presentation: ANTIGRAVITY_PRESENTATION,
         enabled: true,
         checkedAt,
-        models,
+        models: dynamicModels,
         probe: {
           installed: false,
           version: null,
@@ -386,7 +515,7 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
         presentation: ANTIGRAVITY_PRESENTATION,
         enabled: true,
         checkedAt,
-        models,
+        models: dynamicModels,
         probe: {
           installed: true,
           version,
@@ -407,7 +536,7 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
       presentation: ANTIGRAVITY_PRESENTATION,
       enabled: true,
       checkedAt,
-      models,
+      models: dynamicModels,
       probe: {
         installed: true,
         version,

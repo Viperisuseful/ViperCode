@@ -30,15 +30,21 @@ Session methods lazily import `google.antigravity` and drive the live SDK:
 - `respond_to_request`
 - `respond_to_user_input`
 - `read_thread`
+- `rollback_thread`
 - `stop_session`
 
-`rollback_thread` returns a structured unsupported error because the installed
-SDK build does not expose checkpoints.
+`rollback_thread` performs local-history rollback: it trims ViperCode's bridge
+turn snapshots and, where the installed SDK keeps history in memory, trims the
+SDK conversation history. The installed SDK build still does not expose a
+backend checkpoint restore API.
 
 `start_session` accepts `authMode`, `gcpProject`, and `gcpLocation`. The default
-auth mode is `google-oauth`, which maps to SDK Vertex/ADC configuration:
-`LocalAgentConfig(vertex=True, project=..., location=...)`. `api-key` mode is
-available as an explicit fallback and relies on `GEMINI_API_KEY`.
+auth mode is `google-oauth`, which maps to SDK Vertex/ADC configuration when
+project/location are set: `LocalAgentConfig(vertex=True, project=...,
+location=...)`. If project/location are absent, `google-oauth` can reuse a
+readable Antigravity CLI OAuth profile. `agy-oauth` forces CLI profile reuse.
+`api-key` mode is available as an explicit fallback and relies on
+`GEMINI_API_KEY`.
 
 ## Requirements
 
