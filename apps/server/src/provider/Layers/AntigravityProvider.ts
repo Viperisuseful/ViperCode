@@ -152,11 +152,28 @@ function antigravityOAuthProfileCandidates(
     ...(explicit ? [explicit] : []),
     ...roots.flatMap((root) => [
       join(root, "oauth_creds.json"),
+      join(root, "google_credentials"),
+      join(root, "auth.json"),
       join(root, "antigravity-cli", "oauth_creds.json"),
       join(root, "antigravity-cli", "antigravity-oauth-token"),
+      join(root, "antigravity-cli", "google_credentials"),
+      join(root, "antigravity-cli", "auth.json"),
+      join(root, "antigravity-cli", "config.json"),
     ]),
   ];
   return [...new Set(candidates)];
+}
+
+function hasAntigravityOauthBearerToken(environment: NodeJS.ProcessEnv): boolean {
+  return (
+    firstEnv(
+      environment,
+      "AGY_OAUTH_TOKEN",
+      "ANTIGRAVITY_OAUTH_TOKEN",
+      "ANTIGRAVITY_ACCESS_TOKEN",
+      "GOOGLE_OAUTH_ACCESS_TOKEN",
+    ) !== undefined
+  );
 }
 
 function hasAntigravityCliOAuthProfile(
@@ -177,7 +194,9 @@ function resolveAntigravityAuthStatus(
   readonly label: string;
 } {
   const authMode = settings.authMode.trim() || "google-oauth";
+  const hasOauthBearerToken = hasAntigravityOauthBearerToken(environment);
   const hasCliOAuthProfile = hasAntigravityCliOAuthProfile(settings, environment);
+  const hasOAuthCredential = hasOauthBearerToken || hasCliOAuthProfile;
   if (authMode === "api-key" || authMode === "gemini-api-key") {
     const hasApiKey = firstEnv(environment, "GEMINI_API_KEY", "GOOGLE_API_KEY") !== undefined;
     return {
@@ -194,20 +213,21 @@ function resolveAntigravityAuthStatus(
   }
 
   if (["agy-oauth", "cli-oauth", "antigravity-cli-oauth"].includes(authMode)) {
+    const label = hasOauthBearerToken
+      ? "Antigravity OAuth bearer token"
+      : hasCliOAuthProfile
+        ? "Antigravity CLI OAuth profile"
+        : "Antigravity OAuth credentials missing";
     return {
       auth: {
-        status: hasCliOAuthProfile ? "unknown" : "unauthenticated",
+        status: hasOAuthCredential ? "unknown" : "unauthenticated",
         type: "google-oauth",
-        label: hasCliOAuthProfile
-          ? "Antigravity CLI OAuth profile"
-          : "Antigravity CLI OAuth profile missing",
+        label,
       },
-      label: hasCliOAuthProfile
-        ? "Antigravity CLI OAuth profile"
-        : "Antigravity CLI OAuth setup incomplete",
-      setupWarning: hasCliOAuthProfile
+      label: hasOAuthCredential ? label : "Antigravity OAuth setup incomplete",
+      setupWarning: hasOAuthCredential
         ? undefined
-        : "CLI OAuth auth is selected, but no readable Antigravity OAuth profile was found. Run `agy` to sign in or set ANTIGRAVITY_CLI_OAUTH_PROFILE.",
+        : "CLI OAuth auth is selected, but no explicit OAuth bearer token or readable Antigravity OAuth profile was found. If `agy` only stored auth in the OS keyring, set AGY_OAUTH_TOKEN or ANTIGRAVITY_CLI_OAUTH_PROFILE.",
     };
   }
 
@@ -229,20 +249,22 @@ function resolveAntigravityAuthStatus(
     const label =
       project && location
         ? `OAuth/ADC (${project}, ${location})`
-        : hasCliOAuthProfile
-          ? "Antigravity CLI OAuth profile"
-          : "OAuth setup incomplete";
+        : hasOauthBearerToken
+          ? "Antigravity OAuth bearer token"
+          : hasCliOAuthProfile
+            ? "Antigravity CLI OAuth profile"
+            : "OAuth setup incomplete";
     return {
       auth: {
-        status: (project && location) || hasCliOAuthProfile ? "unknown" : "unauthenticated",
+        status: (project && location) || hasOAuthCredential ? "unknown" : "unauthenticated",
         type: "google-oauth",
         label,
       },
       label,
       setupWarning:
-        (project && location) || hasCliOAuthProfile
+        (project && location) || hasOAuthCredential
           ? undefined
-          : "OAuth auth is selected. Set GCP project/location and run `gcloud auth application-default login`, or run `agy` so ViperCode can reuse a readable CLI OAuth profile.",
+          : "OAuth auth is selected. Set GCP project/location and run `gcloud auth application-default login`, set AGY_OAUTH_TOKEN, or provide a readable `agy` OAuth profile. SDK sessions cannot automatically reuse OS-keyring-only CLI auth in this SDK build.",
     };
   }
 

@@ -11,6 +11,7 @@ the Node side may send replies, interrupts, or stop requests.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import mimetypes
 import os
@@ -278,8 +279,13 @@ def _oauth_profile_candidates(request: Dict[str, Any]) -> list[Path]:
         candidates.extend(
             [
                 root / "oauth_creds.json",
+                root / "google_credentials",
+                root / "auth.json",
                 root / "antigravity-cli" / "oauth_creds.json",
                 root / "antigravity-cli" / "antigravity-oauth-token",
+                root / "antigravity-cli" / "google_credentials",
+                root / "antigravity-cli" / "auth.json",
+                root / "antigravity-cli" / "config.json",
             ]
         )
 
@@ -306,7 +312,47 @@ def _profile_expired(data: Dict[str, Any]) -> bool:
     return expiry <= time.time() + 60
 
 
+def _direct_oauth_access_token() -> Optional[tuple[str, str]]:
+    for name in (
+        "AGY_OAUTH_TOKEN",
+        "ANTIGRAVITY_OAUTH_TOKEN",
+        "ANTIGRAVITY_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+    ):
+        value = os.environ.get(name)
+        if isinstance(value, str) and value.strip():
+            return value.strip(), f"environment:{name}"
+    return None
+
+
+def _walk_dicts(value: Any) -> Iterable[Dict[str, Any]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_dicts(child)
+
+
+def _extract_access_token(data: Dict[str, Any]) -> Optional[tuple[str, Dict[str, Any]]]:
+    for candidate in _walk_dicts(data):
+        token = (
+            candidate.get("access_token")
+            or candidate.get("accessToken")
+            or candidate.get("oauth_access_token")
+            or candidate.get("token")
+        )
+        if isinstance(token, str) and token.strip():
+            return token.strip(), candidate
+    return None
+
+
 def _load_cli_oauth_access_token(request: Dict[str, Any]) -> tuple[str, str]:
+    direct = _direct_oauth_access_token()
+    if direct is not None:
+        return direct
+
     expired_profile_found = False
     for path in _oauth_profile_candidates(request):
         try:
@@ -323,23 +369,28 @@ def _load_cli_oauth_access_token(request: Dict[str, Any]) -> tuple[str, str]:
             data = {"access_token": raw}
         if not isinstance(data, dict):
             continue
-        token = data.get("access_token") or data.get("accessToken") or data.get("token")
-        if not isinstance(token, str) or not token.strip():
+        extracted = _extract_access_token(data)
+        if extracted is None:
             continue
-        if _profile_expired(data):
+        token, token_payload = extracted
+        if _profile_expired(token_payload):
             expired_profile_found = True
             continue
-        return token.strip(), str(path)
+        return token, str(path)
 
     if expired_profile_found:
         raise BridgeRequestError(
             "Antigravity CLI OAuth profile was found but its access token is expired. "
-            "Run `agy` again to refresh sign-in, or configure OAuth/ADC project auth.",
+            "Run `agy` again to refresh sign-in, provide AGY_OAUTH_TOKEN, or configure "
+            "OAuth/ADC project auth.",
             "cli_oauth_profile_expired",
         )
     raise BridgeRequestError(
-        "Antigravity CLI OAuth profile was not found. Run `agy` to sign in, set "
-        "ANTIGRAVITY_CLI_OAUTH_PROFILE, or configure OAuth/ADC project auth.",
+        "Antigravity OAuth credentials were not found in an explicit bearer-token "
+        "environment variable or a readable CLI token profile. The `agy` CLI may be "
+        "signed in through the OS keyring, but this SDK build cannot reuse keyring-only "
+        "profiles directly. Set AGY_OAUTH_TOKEN, set ANTIGRAVITY_CLI_OAUTH_PROFILE, "
+        "or configure OAuth/ADC project auth.",
         "cli_oauth_profile_not_found",
     )
 
@@ -376,6 +427,90 @@ class BridgeSession:
     def next_request_id(self, prefix: str) -> str:
         self.request_counter += 1
         return f"{prefix}-{self.session_id}-{self.request_counter}"
+
+
+def _signature_accepts(method: Any, args: tuple[Any, ...], kwargs: Dict[str, Any]) -> bool:
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return True
+    try:
+        signature.bind(*args, **kwargs)
+        return True
+    except TypeError:
+        return False
+
+
+async def _await_if_needed(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _try_public_sdk_rollback(
+    session: BridgeSession,
+    *,
+    kept_count: int,
+    num_turns: int,
+) -> Optional[str]:
+    """Use an official SDK rollback method when one is present.
+
+    Current SDK builds expose only in-memory history helpers, but this keeps the
+    bridge upgrade-ready without reaching into private transports or key files.
+    """
+
+    targets: list[tuple[str, Any]] = [("Agent", session.agent)]
+    conversation = getattr(session.agent, "conversation", None)
+    if conversation is not None:
+        targets.append(("Conversation", conversation))
+
+    rollback_attempts = [
+        ((), {"num_turns": num_turns}),
+        ((), {"turns": num_turns}),
+        ((num_turns,), {}),
+    ]
+    rollback_to_turn_attempts = [
+        ((), {"turn_count": kept_count}),
+        ((), {"target_turn_count": kept_count}),
+        ((kept_count,), {}),
+    ]
+    candidates = [
+        (
+            ("rollback_thread", "rollback_turns", "rollback", "rewind_turns", "rewind"),
+            rollback_attempts,
+        ),
+        (
+            (
+                "rollback_to_turn",
+                "rewind_to_turn",
+                "restore_to_turn",
+                "truncate_to_turn",
+                "restore_history_to_turn",
+            ),
+            rollback_to_turn_attempts,
+        ),
+    ]
+
+    for target_label, target in targets:
+        for method_names, attempts in candidates:
+            for method_name in method_names:
+                method = getattr(target, method_name, None)
+                if not callable(method):
+                    continue
+                for args, kwargs in attempts:
+                    if not _signature_accepts(method, args, kwargs):
+                        continue
+                    try:
+                        await _await_if_needed(method(*args, **kwargs))
+                        return f"{target_label}.{method_name}"
+                    except TypeError:
+                        continue
+                    except Exception as exc:
+                        raise BridgeRequestError(
+                            f"Antigravity SDK rollback method {target_label}.{method_name} failed: {exc}",
+                            "sdk_rollback_failed",
+                        ) from exc
+    return None
 
 
 class Bridge:
@@ -903,33 +1038,41 @@ class Bridge:
         if not isinstance(num_turns, int) or num_turns < 1:
             raise BridgeRequestError("rollback_thread requires a positive numTurns.", "invalid_request")
         kept_count = max(0, len(session.turns) - num_turns)
+        sdk_rollback_method = await _try_public_sdk_rollback(
+            session,
+            kept_count=kept_count,
+            num_turns=num_turns,
+        )
         session.turns = session.turns[:kept_count]
-        sdk_history_rolled_back = False
-        try:
-            conversation = getattr(session.agent, "conversation", None)
-            turn_indices = getattr(conversation, "_turn_start_indices", None)
-            steps = getattr(conversation, "_steps", None)
-            compaction_indices = getattr(conversation, "_compaction_indices", None)
-            if isinstance(turn_indices, list) and isinstance(steps, list):
-                if kept_count == 0:
-                    conversation.clear_history()
-                    sdk_history_rolled_back = True
-                elif kept_count < len(turn_indices):
-                    boundary = turn_indices[kept_count]
-                    del steps[boundary:]
-                    del turn_indices[kept_count:]
-                    if isinstance(compaction_indices, list):
-                        compaction_indices[:] = [idx for idx in compaction_indices if idx < boundary]
-                    sdk_history_rolled_back = True
-        except Exception as exc:
-            _log(f"local history rollback failed: {exc}")
+        sdk_history_rolled_back = sdk_rollback_method is not None
+        rollback_mode = "sdk" if sdk_rollback_method is not None else "local-history"
+        if sdk_rollback_method is None:
+            try:
+                conversation = getattr(session.agent, "conversation", None)
+                turn_indices = getattr(conversation, "_turn_start_indices", None)
+                steps = getattr(conversation, "_steps", None)
+                compaction_indices = getattr(conversation, "_compaction_indices", None)
+                if isinstance(turn_indices, list) and isinstance(steps, list):
+                    if kept_count == 0:
+                        conversation.clear_history()
+                        sdk_history_rolled_back = True
+                    elif kept_count < len(turn_indices):
+                        boundary = turn_indices[kept_count]
+                        del steps[boundary:]
+                        del turn_indices[kept_count:]
+                        if isinstance(compaction_indices, list):
+                            compaction_indices[:] = [idx for idx in compaction_indices if idx < boundary]
+                        sdk_history_rolled_back = True
+            except Exception as exc:
+                _log(f"local history rollback failed: {exc}")
         return {
             "threadId": session.session_id,
             "conversationId": session.conversation_id,
             "turnCount": len(session.turns),
             "rolledBackTurns": num_turns,
-            "rollbackMode": "local-history",
+            "rollbackMode": rollback_mode,
             "sdkHistoryRolledBack": sdk_history_rolled_back,
+            **({"sdkRollbackMethod": sdk_rollback_method} if sdk_rollback_method else {}),
             "turns": session.turns,
         }
 

@@ -1,7 +1,7 @@
 # Antigravity Provider Implementation Plan
 
 Date: 2026-06-23
-Status: Implemented with SDK auth, CLI OAuth compatibility, dynamic CLI model probing, and local-history rollback
+Status: Implemented with SDK auth, explicit OAuth token/profile compatibility, dynamic CLI model probing, and SDK-aware rollback fallback
 Scope: Add Google Antigravity as a first-party ViperCode provider, comparable to Codex, Claude, GitHub Copilot, and OpenCode.
 
 ## Implementation Update
@@ -18,9 +18,10 @@ Local SDK probing answered the main open questions:
 
 - `Agent(LocalAgentConfig())` constructs, but `Agent.__aenter__` currently
   requires SDK model credentials. On this machine, CLI sign-in alone does not
-  satisfy the Python SDK. ViperCode now uses OAuth/ADC first via
-  `LocalAgentConfig(vertex=True, project=..., location=...)`; `GEMINI_API_KEY`
-  is only an explicit fallback.
+  satisfy the Python SDK when the CLI profile is OS-keyring-only. ViperCode now
+  uses OAuth/ADC first through `LocalAgentConfig` with `vertex=True`, `project`,
+  and `location`, then explicit OAuth bearer-token/readable-profile
+  compatibility. `GEMINI_API_KEY` is only an explicit fallback.
 - `conversation_id` is not reliable before the first exchange; ViperCode stores
   it when the SDK reports it after a turn.
 - Streaming exposes `Text`, `Thought`, and `ToolCall` chunks; tool result
@@ -28,11 +29,12 @@ Local SDK probing answered the main open questions:
 - Cancellation goes through `ChatResponse.cancel()` / conversation cancel and
   is exposed as turn cancellation in ViperCode.
 - The installed SDK build does not expose backend checkpoint rollback.
-  `rollbackThread` now performs local-history rollback by trimming ViperCode
-  turn snapshots and SDK in-memory history where available.
-- The SDK does not expose direct `agy` profile reuse, but ViperCode now has a
-  guarded CLI OAuth compatibility path that reads a local token profile without
-  logging secrets.
+  `rollbackThread` now probes public SDK rollback/rewind methods first and
+  falls back to local-history rollback by trimming ViperCode turn snapshots and
+  SDK in-memory history where available.
+- The SDK does not expose direct `agy` keyring/profile reuse, but ViperCode now
+  has a guarded OAuth compatibility path that accepts explicit bearer-token env
+  vars or reads a local token profile without logging secrets.
 - The SDK does not expose a first-class model-list API in this build; ViperCode
   probes `agy models` and falls back to SDK defaults/custom models when the CLI
   returns no output.
@@ -694,7 +696,7 @@ Manual verification:
 - Does the SDK expose a stable list-models API, or should ViperCode rely on CLI output plus defaults/custom models? Current implementation uses `agy models` when available, then SDK-observed defaults plus custom models.
 - Can SDK cancellation interrupt an already-running local tool call, or only stop future model/tool work? The adapter calls SDK cancellation; exact in-tool granularity still needs a live authenticated turn.
 - Are tool-call hooks detailed enough to classify file edits, shell, MCP, web, and subagents without fragile name matching? Current implementation uses SDK names plus hook payloads; live SDK traces should refine classification.
-- Can the SDK use the same keyring/session as `agy`, or does it require separate ADC/Google auth in some configurations? Current implementation supports SDK OAuth/ADC and a guarded CLI OAuth token-profile compatibility path; OS-keyring-only CLI profiles may still require ADC until the SDK exposes first-class profile reuse.
+- Can the SDK use the same keyring/session as `agy`, or does it require separate ADC/Google auth in some configurations? Current implementation supports SDK OAuth/ADC plus explicit OAuth bearer-token/readable-profile compatibility; OS-keyring-only CLI profiles still are not scraped until Google exposes first-class profile reuse.
 - Is there an official `agy --version`, `agy auth status`, or JSON status command not surfaced in the current docs?
 - Should ViperCode eventually offer a pure CLI terminal mode using `agy -p` for lightweight one-shot prompts, separate from the full SDK provider?
 

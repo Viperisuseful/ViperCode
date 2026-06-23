@@ -118,6 +118,42 @@ Available models:
     }),
   );
 
+  it.effect("accepts an explicit Antigravity OAuth bearer token without project config", () =>
+    Effect.gen(function* () {
+      const snapshot = yield* probe(
+        {},
+        (command, args) =>
+          command === "python"
+            ? { stdout: '{"sdkAvailable": true, "sdkVersion": "0.3.0"}' }
+            : args[0] === "models"
+              ? { stdout: "" }
+              : { stdout: "agy version 1.2.3" },
+        { AGY_OAUTH_TOKEN: "test-oauth-token" },
+      );
+      expect(snapshot.installed).toBe(true);
+      expect(snapshot.status).toBe("ready");
+      expect(snapshot.auth.status).toBe("unknown");
+      expect(snapshot.auth.type).toBe("google-oauth");
+      expect(snapshot.message).toContain("Antigravity OAuth bearer token");
+    }),
+  );
+
+  it.effect("explains OS-keyring-only auth when forced CLI OAuth has no token", () =>
+    Effect.gen(function* () {
+      const snapshot = yield* probe({ authMode: "agy-oauth" }, (command, args) =>
+        command === "python"
+          ? { stdout: '{"sdkAvailable": true, "sdkVersion": "0.3.0"}' }
+          : args[0] === "models"
+            ? { stdout: "" }
+            : { stdout: "agy version 1.2.3" },
+      );
+      expect(snapshot.status).toBe("warning");
+      expect(snapshot.auth.status).toBe("unauthenticated");
+      expect(snapshot.message).toContain("OS keyring");
+      expect(snapshot.message).toContain("AGY_OAUTH_TOKEN");
+    }),
+  );
+
   it.effect("reports ready when both CLI and SDK are present with OAuth/ADC project config", () =>
     Effect.gen(function* () {
       const snapshot = yield* probe({ gcpProject: "viper-project" }, (command, args) =>

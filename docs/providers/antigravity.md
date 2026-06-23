@@ -77,13 +77,22 @@ location=...)`.
 Viper Code also supports best-effort Antigravity CLI OAuth profile reuse. If
 Auth mode is `google-oauth` and project/location are not configured, or Auth
 mode is explicitly set to `agy-oauth`, the bridge looks for a readable CLI OAuth
-profile at `ANTIGRAVITY_CLI_OAUTH_PROFILE`,
-`ANTIGRAVITY_CLI_OAUTH_TOKEN_FILE`, `GEMINI_OAUTH_CREDS`,
-`<Antigravity home path>/oauth_creds.json`,
+profile or an explicit bearer token. Bearer-token env vars are
+`AGY_OAUTH_TOKEN`, `ANTIGRAVITY_OAUTH_TOKEN`, `ANTIGRAVITY_ACCESS_TOKEN`, or
+`GOOGLE_OAUTH_ACCESS_TOKEN`. Readable profiles are discovered from
+`ANTIGRAVITY_CLI_OAUTH_PROFILE`, `ANTIGRAVITY_CLI_OAUTH_TOKEN_FILE`,
+`GEMINI_OAUTH_CREDS`, `<Antigravity home path>/oauth_creds.json`,
+`<Antigravity home path>/google_credentials`,
+`<Antigravity home path>/auth.json`,
 `<Antigravity home path>/antigravity-cli/oauth_creds.json`,
-`~/.gemini/oauth_creds.json`, or `~/.gemini/antigravity-cli/oauth_creds.json`.
-Only the access token is used and it is never logged. Expired token profiles
-return a setup error; run `agy` again to refresh sign-in.
+`<Antigravity home path>/antigravity-cli/antigravity-oauth-token`,
+`<Antigravity home path>/antigravity-cli/google_credentials`,
+`<Antigravity home path>/antigravity-cli/auth.json`,
+`<Antigravity home path>/antigravity-cli/config.json`,
+`~/.gemini/oauth_creds.json`, or the same `antigravity-cli/*` paths under
+`~/.gemini`. Only the access token is used and it is never logged. Expired token
+profiles return a setup error; run `agy` again to refresh sign-in or provide a
+fresh bearer token.
 
 API-key auth remains available as an explicit fallback by setting Auth mode to
 `api-key` and providing `GEMINI_API_KEY`.
@@ -105,9 +114,9 @@ GCP location: us-central1
 Other settings:
 
 - **Auth mode** — `google-oauth` by default. This uses SDK Vertex/ADC auth when
-  project/location are set, otherwise it can reuse a readable `agy` OAuth
-  profile. Use `agy-oauth` to force CLI profile reuse, or `api-key` only when
-  you explicitly want `GEMINI_API_KEY` fallback.
+  project/location are set, otherwise it can reuse an explicit OAuth bearer
+  token or readable `agy` OAuth profile. Use `agy-oauth` to force token/profile
+  reuse, or `api-key` only when you explicitly want `GEMINI_API_KEY` fallback.
 - **GCP project** — required for OAuth/ADC mode unless `GOOGLE_CLOUD_PROJECT`
   or `GCLOUD_PROJECT` is set in the provider environment.
 - **GCP location** — Vertex/Gemini Enterprise location for OAuth/ADC mode.
@@ -157,8 +166,10 @@ Non-workspace access and `always-proceed` are never enabled silently.
 - **Wrong Python detected.** Set `Python path` to an absolute path (for example
   `/usr/bin/python3` or a virtualenv's `python`).
 - **OAuth setup issues.** Set GCP project/location and run
-  `gcloud auth application-default login`, or run `agy` again to refresh a
-  readable CLI OAuth profile.
+  `gcloud auth application-default login`, set `AGY_OAUTH_TOKEN`, or run `agy`
+  again to refresh a readable CLI OAuth profile. A machine can be signed into
+  `agy` while still having no readable profile if the CLI stored credentials
+  only in the OS keyring.
 - **API key fallback issues.** Set Auth mode to `api-key` and provide
   `GEMINI_API_KEY` in the provider or server environment.
 
@@ -166,13 +177,15 @@ Non-workspace access and `always-proceed` are never enabled silently.
 
 - SDK auth status is not yet machine-readable, so the card shows
   authentication as unknown even after setup.
-- CLI OAuth profile reuse depends on a readable local token profile. Systems
-  where `agy` stores tokens only in an OS keyring may still need OAuth/ADC
-  project auth until Google exposes profile reuse in the SDK.
+- The current SDK build still does not expose first-class `agy` keyring/profile
+  reuse. Viper Code supports explicit OAuth bearer-token env vars and readable
+  CLI token profiles, but it does not scrape OS keyrings.
 - SDK checkpoint rollback is not exposed in this SDK build. Viper Code performs
   local-history rollback by trimming its provider turn snapshot and SDK
-  conversation history where the SDK keeps it in memory. This is enough for
-  Viper Code UI rollback, but it is not a remote Antigravity checkpoint restore.
+  conversation history where the SDK keeps it in memory. The bridge now probes
+  for public SDK rollback/rewind methods first, so a future SDK release can take
+  over without using private transports, but this is not a remote Antigravity
+  checkpoint restore in the current SDK.
 - The current SDK build does not expose a first-class model-list API. Viper Code
   uses `agy models` when the CLI returns output, then falls back to SDK defaults
   and custom models.

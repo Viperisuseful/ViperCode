@@ -35,7 +35,7 @@ Install and authenticate at least one provider before use:
 - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
 - GitHub Copilot: install [GitHub Copilot CLI](https://github.com/github/copilot-cli) and run `copilot login`
 - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-- Antigravity: install the [Antigravity CLI](https://antigravity.google/download), run `agy` to sign in, and `pip install google-antigravity`. See [docs/providers/antigravity.md](./docs/providers/antigravity.md). Sessions are SDK-backed through Viper Code's Python bridge; OAuth/ADC plus best-effort `agy` OAuth profile reuse are preferred, with `GEMINI_API_KEY` as an explicit fallback.
+- Antigravity: install the [Antigravity CLI](https://antigravity.google/download), run `agy` to sign in, and `pip install google-antigravity`. See [docs/providers/antigravity.md](./docs/providers/antigravity.md). Sessions are SDK-backed through Viper Code's Python bridge; OAuth/ADC plus explicit OAuth bearer-token or readable `agy` profile reuse are preferred, with `GEMINI_API_KEY` as an explicit fallback.
 
 Viper Code uses your existing CLI setup. Provider settings also support multiple named instances, custom homes, custom env vars, sensitive secret storage, model favorites, and provider-specific model controls.
 
