@@ -723,12 +723,14 @@ class Bridge:
                 try:
                     access_token, _profile_path = _load_cli_oauth_access_token(request)
                 except BridgeRequestError as exc:
+                    # Preserve the specific profile-not-found/expired guidance
+                    # (which names AGY_OAUTH_TOKEN and the CLI profile paths) and
+                    # its code, just appending the ADC alternative. Re-wrapping
+                    # into a generic message dropped actionable setup steps.
                     raise BridgeRequestError(
-                        "Google OAuth auth requires either GCP project/location for ADC or a "
-                        "readable Antigravity CLI OAuth profile. Set gcpProject/gcpLocation and "
-                        "run `gcloud auth application-default login`, or run `agy` to refresh "
-                        "CLI sign-in.",
-                        "oauth_setup_required",
+                        f"{exc.message} Alternatively, set gcpProject/gcpLocation and run "
+                        "`gcloud auth application-default login` to use OAuth/ADC.",
+                        exc.code,
                     ) from exc
                 base_url = _request_first(
                     request,

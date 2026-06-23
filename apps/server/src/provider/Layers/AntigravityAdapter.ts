@@ -331,6 +331,18 @@ function bridgeErrorDetail(error: AntigravityBridgeError): string {
   return error.code ? `${error.message} (${error.code})` : error.message;
 }
 
+// The bridge reports auth failures under several codes (`auth_required`,
+// `oauth_required`, `oauth_setup_required`, `auth_failed`,
+// `cli_oauth_profile_not_found`, `cli_oauth_profile_expired`). All should
+// surface as a permission error so the UI prompts the user to fix auth rather
+// than treating it as an opaque provider failure.
+function isAntigravityAuthErrorCode(code: string | undefined): boolean {
+  if (!code) {
+    return false;
+  }
+  return code.includes("auth") || code.includes("oauth") || code.includes("credential");
+}
+
 function toRequestError(
   method: string,
   error: AntigravityBridgeError,
@@ -771,7 +783,7 @@ export const makeAntigravityAdapter = (
             type: "runtime.error",
             payload: {
               message: event.message,
-              class: event.code === "auth_required" ? "permission_error" : "provider_error",
+              class: isAntigravityAuthErrorCode(event.code) ? "permission_error" : "provider_error",
               ...(event.code ? { detail: { code: event.code } } : {}),
             },
           });
