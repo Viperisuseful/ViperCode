@@ -33,6 +33,7 @@ import { createModelCapabilities } from "@vipercode/shared/model";
 
 import {
   buildServerProvider,
+  buildSelectOptionDescriptor,
   DEFAULT_TIMEOUT_MS,
   detailFromResult,
   isCommandMissingCause,
@@ -53,12 +54,26 @@ const DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES: ModelCapabilities = createModelCap
   optionDescriptors: [],
 });
 
+const GEMINI_31_PRO_CAPABILITIES: ModelCapabilities = createModelCapabilities({
+  optionDescriptors: [
+    buildSelectOptionDescriptor({
+      id: "thinkingLevel",
+      label: "Thinking",
+      options: [
+        { value: "low", label: "Low", isDefault: true },
+        { value: "high", label: "High" },
+      ],
+    }),
+  ],
+});
+
 // Models served by the Antigravity backend (the same backend the `agy` CLI
 // drives). The SDK exposes no list-models API and `agy models` is an
 // interactive TUI, so we ship the known set as defaults; users can still add
 // others via custom models. Reasoning tiers are encoded in the model id the way
-// the backend accepts them (e.g. `gemini-3.1-pro-high`), mirroring the CLI's
-// "Gemini 3.1 Pro (High)" picker entries.
+// the backend accepts them (e.g. `gemini-3.1-pro-high`). ViperCode presents
+// Gemini Pro as one selectable model and maps the Thinking option back to those
+// backend ids at session start.
 const BUILT_IN_ANTIGRAVITY_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "gemini-3.5-flash",
@@ -68,18 +83,11 @@ const BUILT_IN_ANTIGRAVITY_MODELS: ReadonlyArray<ServerProviderModel> = [
     capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
   },
   {
-    slug: "gemini-3.1-pro-low",
-    name: "Gemini 3.1 Pro (Low)",
-    shortName: "3.1 Pro Low",
+    slug: "gemini-3.1-pro",
+    name: "Gemini 3.1 Pro",
+    shortName: "3.1 Pro",
     isCustom: false,
-    capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
-  },
-  {
-    slug: "gemini-3.1-pro-high",
-    name: "Gemini 3.1 Pro (High)",
-    shortName: "3.1 Pro High",
-    isCustom: false,
-    capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
+    capabilities: GEMINI_31_PRO_CAPABILITIES,
   },
   {
     slug: "claude-sonnet-4-6",
@@ -360,12 +368,38 @@ export function parseAntigravityCliModels(output: string): ReadonlyArray<string>
 }
 
 function cliModelsFor(modelNames: ReadonlyArray<string>): ReadonlyArray<ServerProviderModel> {
-  return modelNames.map((name) => ({
-    slug: name,
-    name,
-    isCustom: false,
-    capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
-  }));
+  const knownByName = new Map<string, ServerProviderModel>();
+  for (const model of BUILT_IN_ANTIGRAVITY_MODELS) {
+    knownByName.set(model.slug.toLowerCase(), model);
+    knownByName.set(model.name.toLowerCase(), model);
+    if (model.shortName) {
+      knownByName.set(model.shortName.toLowerCase(), model);
+    }
+  }
+  knownByName.set("gemini 3.5 flash (medium)", BUILT_IN_ANTIGRAVITY_MODELS[0]!);
+  knownByName.set("gemini 3.5 flash (high)", BUILT_IN_ANTIGRAVITY_MODELS[0]!);
+  knownByName.set("gemini 3.1 pro (low)", BUILT_IN_ANTIGRAVITY_MODELS[1]!);
+  knownByName.set("gemini 3.1 pro (high)", BUILT_IN_ANTIGRAVITY_MODELS[1]!);
+
+  const seen = new Set<string>();
+  const models: ServerProviderModel[] = [];
+  for (const name of modelNames) {
+    const known = knownByName.get(name.toLowerCase());
+    const model =
+      known ??
+      ({
+        slug: name,
+        name,
+        isCustom: false,
+        capabilities: DEFAULT_ANTIGRAVITY_MODEL_CAPABILITIES,
+      } satisfies ServerProviderModel);
+    if (seen.has(model.slug)) {
+      continue;
+    }
+    seen.add(model.slug);
+    models.push(model);
+  }
+  return models;
 }
 
 const modelsFor = (settings: AntigravitySettings, discoveredModels: ReadonlyArray<string> = []) =>

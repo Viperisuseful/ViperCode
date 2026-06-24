@@ -91,17 +91,43 @@ type EventBaseInput = {
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-function defaultBridgePath(): string {
+function unpackedAsarPath(path: string): string | undefined {
+  return path.includes(".asar") ? path.replace(/\.asar(?=$|[\\/])/, ".asar.unpacked") : undefined;
+}
+
+export function antigravityBridgePathCandidatesFromModuleUrl(
+  moduleUrl: string,
+): ReadonlyArray<string> {
   // Resolve across both layouts, picking the first that exists on disk:
   //   - packaged build: the server is bundled to apps/server/dist/<chunk>.mjs
   //     and the build copies the bridge to dist/antigravityBridge/ (sibling).
+  //     Electron packages that directory under app.asar, so also try the
+  //     matching app.asar.unpacked path where Python can execute real files.
   //   - dev/source: this module is apps/server/src/provider/Layers/, so the
   //     bridge is one directory up under provider/antigravityBridge/.
   const candidates = [
-    new URL("./antigravityBridge/vipercode_antigravity_bridge.py", import.meta.url),
-    new URL("../antigravityBridge/vipercode_antigravity_bridge.py", import.meta.url),
+    new URL("./antigravityBridge/vipercode_antigravity_bridge.py", moduleUrl),
+    new URL("../antigravityBridge/vipercode_antigravity_bridge.py", moduleUrl),
   ].map((url) => fileURLToPath(url));
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[candidates.length - 1]!;
+  const expanded: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const unpacked = unpackedAsarPath(candidate);
+    for (const path of unpacked ? [unpacked, candidate] : [candidate]) {
+      if (!seen.has(path)) {
+        seen.add(path);
+        expanded.push(path);
+      }
+    }
+  }
+  return expanded;
+}
+
+function defaultBridgePath(): string {
+  const candidates = antigravityBridgePathCandidatesFromModuleUrl(import.meta.url);
+  return (
+    candidates.find((candidate) => existsSync(candidate)) ?? candidates[candidates.length - 1]!
+  );
 }
 
 function bridgePathFor(settings: AntigravitySettings): string {
@@ -119,6 +145,28 @@ function bridgeEnvironmentFor(
     env.ANTIGRAVITY_HOME = homePath;
   }
   return env;
+}
+
+export function antigravityBridgeModelForSelection(
+  modelSelection:
+    | {
+        readonly model?: string;
+        readonly options?: ReadonlyArray<{ readonly id: string; readonly value: string | boolean }>;
+      }
+    | null
+    | undefined,
+): string | undefined {
+  const rawModel = modelSelection?.model?.trim();
+  if (!rawModel) {
+    return undefined;
+  }
+  if (rawModel === "gemini-3.1-pro") {
+    const thinkingLevel = modelSelection?.options?.find(
+      (option) => option.id === "thinkingLevel" && typeof option.value === "string",
+    )?.value;
+    return thinkingLevel === "high" ? "gemini-3.1-pro-high" : "gemini-3.1-pro-low";
+  }
+  return rawModel;
 }
 
 function toolPermissionForRuntimeMode(runtimeMode: RuntimeMode): string {
@@ -904,6 +952,7 @@ export const makeAntigravityAdapter = (
 
       const directory = input.cwd ?? serverConfig.cwd;
       const model = input.modelSelection?.model;
+      const bridgeModel = antigravityBridgeModelForSelection(input.modelSelection);
       const incomingConversationId = conversationIdFromResumeCursor(input.resumeCursor);
       const saveDir = join(serverConfig.stateDir, "antigravity", String(boundInstanceId));
       // Ensure the SDK's persistence directory exists before it tries to write.
@@ -914,7 +963,7 @@ export const makeAntigravityAdapter = (
           type: "start_session",
           sessionId: input.threadId,
           cwd: directory,
-          ...(model ? { model } : {}),
+          ...(bridgeModel ? { model: bridgeModel } : {}),
           ...(incomingConversationId ? { conversationId: incomingConversationId } : {}),
           saveDir,
           ...(appDataDir.length > 0 ? { appDataDir } : {}),

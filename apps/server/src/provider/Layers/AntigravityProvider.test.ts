@@ -99,6 +99,28 @@ Available models:
     }),
   );
 
+  it.effect("exposes Gemini Pro as one model with a Thinking selector", () =>
+    Effect.gen(function* () {
+      const snapshot = yield* probe({ enabled: false }, () => ({ stdout: "" }));
+      const pro = snapshot.models.find((model) => model.slug === "gemini-3.1-pro");
+      expect(pro).toBeDefined();
+      expect(snapshot.models.map((model) => model.slug)).not.toContain("gemini-3.1-pro-low");
+      expect(snapshot.models.map((model) => model.slug)).not.toContain("gemini-3.1-pro-high");
+      expect(pro?.capabilities?.optionDescriptors).toEqual([
+        {
+          id: "thinkingLevel",
+          label: "Thinking",
+          type: "select",
+          currentValue: "low",
+          options: [
+            { id: "low", label: "Low", isDefault: true },
+            { id: "high", label: "High" },
+          ],
+        },
+      ]);
+    }),
+  );
+
   it.effect("warns when OAuth/ADC is selected but project setup is incomplete", () =>
     Effect.gen(function* () {
       const snapshot = yield* probe({}, (command, args) =>
@@ -204,9 +226,9 @@ Available models:
             : { stdout: "agy version 1.2.3" },
       );
       expect(snapshot.models.map((model) => model.slug)).toEqual([
-        "Gemini 3.5 Flash (Medium)",
-        "Gemini 3.1 Pro (High)",
-        "Claude Sonnet 4.6 (Thinking)",
+        "gemini-3.5-flash",
+        "gemini-3.1-pro",
+        "claude-sonnet-4-6",
       ]);
     }),
   );

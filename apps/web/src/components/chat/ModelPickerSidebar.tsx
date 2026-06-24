@@ -187,7 +187,6 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             </div>
           );
         })}
-
       </div>
     </ScrollArea>
   );

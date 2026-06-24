@@ -557,6 +557,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     appId: "com.vipercode.vipercode",
     productName: resolveDesktopProductName(version),
     artifactName: "Viper-Code-${version}-${arch}.${ext}",
+    asarUnpack: ["apps/server/dist/antigravityBridge/**"],
     directories: {
       buildResources: "apps/desktop/resources",
     },
