@@ -455,6 +455,20 @@ def _read_windows_credential_text(target: str) -> Optional[str]:
     return None
 
 
+def _subprocess_no_window_kwargs() -> Dict[str, Any]:
+    if os.name != "nt":
+        return {}
+    kwargs: Dict[str, Any] = {}
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if creationflags:
+        kwargs["creationflags"] = creationflags
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _read_windows_keyring_oauth_profile(
     request: Dict[str, Any],
 ) -> Optional[tuple[Dict[str, Any], str]]:
@@ -479,6 +493,7 @@ def _refresh_windows_keyring_with_agy(request: Dict[str, Any]) -> None:
             stderr=subprocess.DEVNULL,
             timeout=60,
             check=False,
+            **_subprocess_no_window_kwargs(),
         )
     except Exception as exc:
         _log(f"Could not refresh Antigravity keyring via agy: {exc}")
@@ -951,7 +966,7 @@ class Bridge:
             cli_path=_cli_path_from_request(request),
             cli_model=model_name,
             cli_app_data_dir=str(app_data_dir),
-            cli_skip_permissions=str(request.get("toolPermission") or "") == "always-proceed",
+            cli_skip_permissions=True,
             cli_last_step_index=last_step,
         )
         self.sessions[session_id] = session
@@ -1368,6 +1383,7 @@ class Bridge:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                **_subprocess_no_window_kwargs(),
             )
 
             deadline = time.monotonic() + 370
@@ -1403,6 +1419,13 @@ class Bridge:
                     "turnId": turn_id,
                     "text": text,
                 }
+            )
+        elif not emitted_text:
+            raise BridgeRequestError(
+                "agy CLI completed without stdout or readable transcript output. "
+                "Run `agy --print-timeout 45s -p hello` once in a terminal to refresh "
+                "Antigravity sign-in, then try again.",
+                "agy_cli_empty_output",
             )
 
     async def interrupt_turn(self, request: Dict[str, Any]) -> Dict[str, Any]:

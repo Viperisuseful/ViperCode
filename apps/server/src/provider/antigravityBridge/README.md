@@ -61,9 +61,10 @@ are passed before `-p`, the prompt is the final argument, and the bridge tails
 `~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/logs/transcript.jsonl`
 while the process is running. Current `agy` builds do not expose a reliable
 token-by-token stdout stream for non-TTY callers, so transcript tailing is the
-only supported live path. When ViperCode starts an Antigravity session in
-`full-access` runtime mode, the bridge adds `--dangerously-skip-permissions` so
-headless `agy -p` does not block on permission prompts it cannot display.
+only supported live path. The bridge always adds
+`--dangerously-skip-permissions` for CLI-backed sessions because headless
+`agy -p` cannot surface permission prompts to ViperCode; without that flag, a
+tool/file approval prompt can leave the turn waiting forever.
 
 ## Requirements
 

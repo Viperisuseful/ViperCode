@@ -171,12 +171,13 @@ Viper Code is the user-visible approval authority. Defaults are conservative:
 
 Non-workspace access and `always-proceed` are never enabled silently.
 
-For CLI-backed Antigravity OAuth sessions, Viper Code maps `full-access` runtime
-mode to `agy --dangerously-skip-permissions`. This mirrors Antigravity's
-headless guidance for `agy -p`: print mode cannot show permission prompts, so
-the CLI must either avoid tools that need approval or be launched in its
-auto-approve mode. Use it only in workspaces where you are comfortable allowing
-the agent to edit files and run tools without per-action confirmation.
+For CLI-backed Antigravity OAuth sessions, Viper Code always launches
+`agy -p` with `--dangerously-skip-permissions`. This mirrors Antigravity's
+headless guidance for print mode: `agy -p` cannot route permission prompts back
+to Viper Code, so letting the CLI ask would leave the turn stuck with no usable
+response. Use CLI-backed Antigravity OAuth only in workspaces where you are
+comfortable allowing the agent to edit files and run tools without per-action
+confirmation.
 
 ## Troubleshooting
 
