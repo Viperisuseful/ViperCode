@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  normalizeBareFileMarkdownLinkDestinations,
   resolveMarkdownFileLinkMeta,
   resolveMarkdownFileLinkTarget,
   rewriteMarkdownFileUriHref,
 } from "./markdown-links";
+
+describe("normalizeBareFileMarkdownLinkDestinations", () => {
+  it("wraps bare file uri markdown destinations that contain spaces", () => {
+    expect(
+      normalizeBareFileMarkdownLinkDestinations(
+        "[README.md](file:///C:/Users/viper/Documents/Viper Projects/ViperCode/README.md)",
+      ),
+    ).toBe("[README.md](<file:///C:/Users/viper/Documents/Viper Projects/ViperCode/README.md>)");
+  });
+
+  it("preserves markdown link titles when wrapping bare file uri destinations", () => {
+    expect(
+      normalizeBareFileMarkdownLinkDestinations(
+        `[README.md](file:///C:/Users/viper/Documents/Viper Projects/ViperCode/README.md "Open")`,
+      ),
+    ).toBe(
+      `[README.md](<file:///C:/Users/viper/Documents/Viper Projects/ViperCode/README.md> "Open")`,
+    );
+  });
+});
 
 describe("rewriteMarkdownFileUriHref", () => {
   it("rewrites file uri hrefs into direct path hrefs", () => {

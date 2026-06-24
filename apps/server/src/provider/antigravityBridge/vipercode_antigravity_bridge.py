@@ -472,7 +472,7 @@ def _refresh_windows_keyring_with_agy(request: Dict[str, Any]) -> None:
     cli_path = _request_first(request, "cliPath", "ANTIGRAVITY_CLI_PATH", "AGY_PATH") or "agy"
     try:
         subprocess.run(
-            [cli_path, "-p", "hello", "--print-timeout", "45s"],
+            [cli_path, "--print-timeout", "45s", "-p", "hello"],
             cwd=str(Path(request.get("cwd") or Path.cwd())),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -719,7 +719,6 @@ def _read_cli_model_entries(
             continue
         step_index = entry.get("step_index")
         if isinstance(step_index, int):
-            max_step = max(max_step, step_index)
             if step_index <= after_step:
                 continue
         source = str(entry.get("source") or "").upper()
@@ -728,6 +727,8 @@ def _read_cli_model_entries(
         if source == "MODEL" and isinstance(content, str) and content.strip():
             if "RESPONSE" in entry_type or entry_type in {"TEXT", "MESSAGE"}:
                 text_parts.append(content)
+                if isinstance(step_index, int):
+                    max_step = max(max_step, step_index)
     return "\n".join(text_parts).strip(), max_step
 
 
@@ -771,6 +772,7 @@ class BridgeSession:
     cli_path: str = "agy"
     cli_model: Optional[str] = None
     cli_app_data_dir: Optional[str] = None
+    cli_skip_permissions: bool = False
     cli_last_step_index: int = -1
     cli_turn_count: int = 0
     current_turn_id: Optional[str] = None
@@ -949,6 +951,7 @@ class Bridge:
             cli_path=_cli_path_from_request(request),
             cli_model=model_name,
             cli_app_data_dir=str(app_data_dir),
+            cli_skip_permissions=str(request.get("toolPermission") or "") == "always-proceed",
             cli_last_step_index=last_step,
         )
         self.sessions[session_id] = session
@@ -1301,19 +1304,63 @@ class Bridge:
         app_data_dir = Path(session.cli_app_data_dir) if session.cli_app_data_dir else Path.home() / ".gemini" / "antigravity-cli"
         before_step = session.cli_last_step_index
         args = [session.cli_path]
+        if session.cli_skip_permissions:
+            args.append("--dangerously-skip-permissions")
+        args.extend(["--print-timeout", "5m"])
         if session.cli_model:
             args.extend(["--model", session.cli_model])
         if session.conversation_id:
             args.extend(["--conversation", session.conversation_id])
         elif session.cli_turn_count > 0:
             args.append("--continue")
-        args.extend(["-p", prompt, "--print-timeout", "5m"])
+        args.extend(["-p", prompt])
 
-        def run_cli() -> subprocess.CompletedProcess[str]:
-            env = dict(os.environ)
-            if session.cli_app_data_dir:
-                env["ANTIGRAVITY_HOME"] = session.cli_app_data_dir
-            return subprocess.run(
+        env = dict(os.environ)
+        if session.cli_app_data_dir:
+            env["ANTIGRAVITY_HOME"] = session.cli_app_data_dir
+
+        process: Optional[subprocess.Popen[str]] = None
+        emitted_text = False
+
+        def emit_transcript_updates() -> bool:
+            nonlocal before_step, emitted_text
+            conversation_id = _conversation_id_from_cli_cache(app_data_dir, session.cwd)
+            if conversation_id and conversation_id != session.conversation_id:
+                session.conversation_id = conversation_id
+                before_step = -1
+                _emit(
+                    {
+                        "type": "conversation_id_changed",
+                        "sessionId": session.session_id,
+                        "conversationId": conversation_id,
+                    }
+                )
+
+            if not session.conversation_id:
+                return False
+
+            transcript_text, max_step = _read_cli_model_entries(
+                app_data_dir, session.conversation_id, before_step
+            )
+            if max_step > before_step:
+                before_step = max_step
+                session.cli_last_step_index = max(session.cli_last_step_index, max_step)
+            if not transcript_text:
+                return False
+            emitted_text = True
+            _emit(
+                {
+                    "type": "text_delta",
+                    "sessionId": session.session_id,
+                    "turnId": turn_id,
+                    "text": transcript_text,
+                }
+            )
+            return True
+
+        try:
+            process = await asyncio.to_thread(
+                subprocess.Popen,
                 args,
                 cwd=session.cwd,
                 env=env,
@@ -1321,38 +1368,34 @@ class Bridge:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=360,
-                check=False,
             )
 
-        result = await asyncio.to_thread(run_cli)
+            deadline = time.monotonic() + 370
+            while process.poll() is None:
+                if time.monotonic() >= deadline:
+                    process.kill()
+                    stdout, stderr = await asyncio.to_thread(process.communicate, timeout=10)
+                    message = (stderr or stdout or "agy CLI turn timed out.").strip()
+                    raise BridgeRequestError(message[:1000], "agy_cli_failed")
+                emit_transcript_updates()
+                await asyncio.sleep(0.35)
+
+            stdout, stderr = await asyncio.to_thread(process.communicate, timeout=10)
+        except asyncio.CancelledError:
+            if process is not None and process.poll() is None:
+                process.kill()
+                await asyncio.to_thread(process.wait, timeout=10)
+            raise
+
         session.cli_turn_count += 1
-        if result.returncode != 0:
-            message = (result.stderr or result.stdout or "agy CLI turn failed.").strip()
+        if process.returncode != 0:
+            message = (stderr or stdout or "agy CLI turn failed.").strip()
             raise BridgeRequestError(message[:1000], "agy_cli_failed")
 
-        conversation_id = _conversation_id_from_cli_cache(app_data_dir, session.cwd)
-        if conversation_id and conversation_id != session.conversation_id:
-            session.conversation_id = conversation_id
-            before_step = -1
-            _emit(
-                {
-                    "type": "conversation_id_changed",
-                    "sessionId": session.session_id,
-                    "conversationId": conversation_id,
-                }
-            )
+        emit_transcript_updates()
+        text = (stdout or "").strip()
 
-        text = (result.stdout or "").strip()
-        if session.conversation_id:
-            transcript_text, max_step = _read_cli_model_entries(
-                app_data_dir, session.conversation_id, before_step
-            )
-            session.cli_last_step_index = max(session.cli_last_step_index, max_step)
-            if transcript_text:
-                text = transcript_text
-
-        if text:
+        if text and not emitted_text:
             _emit(
                 {
                     "type": "text_delta",

@@ -56,6 +56,15 @@ authenticated `agy -p` CLI path and read model output from the CLI transcript
 store. `api-key` mode is available as an explicit fallback and relies on
 `GEMINI_API_KEY`.
 
+The CLI-backed runtime treats `agy -p` as a headless print-mode process: flags
+are passed before `-p`, the prompt is the final argument, and the bridge tails
+`~/.gemini/antigravity-cli/brain/<conversation>/.system_generated/logs/transcript.jsonl`
+while the process is running. Current `agy` builds do not expose a reliable
+token-by-token stdout stream for non-TTY callers, so transcript tailing is the
+only supported live path. When ViperCode starts an Antigravity session in
+`full-access` runtime mode, the bridge adds `--dangerously-skip-permissions` so
+headless `agy -p` does not block on permission prompts it cannot display.
+
 ## Requirements
 
 - Python 3.9+ (stdlib only for the transport/probe).

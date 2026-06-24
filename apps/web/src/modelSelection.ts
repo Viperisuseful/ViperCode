@@ -28,6 +28,8 @@ import { sortModelsForProviderInstance } from "./modelOrdering";
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
 const DEFAULT_TEXT_GENERATION_INSTANCE_ID = ProviderInstanceId.make("codex");
+const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
+const LEGACY_ANTIGRAVITY_PRO_MODEL_SLUGS = new Set(["gemini-3.1-pro-low", "gemini-3.1-pro-high"]);
 
 /**
  * Resolve the custom-model list for a given instance, preferring the
@@ -118,6 +120,38 @@ function applyInstanceModelPreferences(
   );
 }
 
+function canonicalModelSlugForProvider(slug: string, provider: ProviderDriverKind): string {
+  if (provider === ANTIGRAVITY_PROVIDER && LEGACY_ANTIGRAVITY_PRO_MODEL_SLUGS.has(slug)) {
+    return "gemini-3.1-pro";
+  }
+  return slug;
+}
+
+function modelOptionsForSelection(
+  provider: ProviderDriverKind,
+  selectedModel: string | null | undefined,
+  selectedOptions: ModelSelection["options"] | undefined,
+): ModelSelection["options"] | undefined {
+  if (
+    provider !== ANTIGRAVITY_PROVIDER ||
+    !selectedModel ||
+    !LEGACY_ANTIGRAVITY_PRO_MODEL_SLUGS.has(selectedModel)
+  ) {
+    return selectedOptions;
+  }
+  const hasThinkingLevel = selectedOptions?.some((option) => option.id === "thinkingLevel");
+  if (hasThinkingLevel) {
+    return selectedOptions;
+  }
+  return [
+    ...(selectedOptions ?? []),
+    {
+      id: "thinkingLevel",
+      value: selectedModel.endsWith("-high") ? "high" : "low",
+    },
+  ];
+}
+
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
   builtInModelSlugs: ReadonlySet<string>,
@@ -128,17 +162,18 @@ export function normalizeCustomModelSlugs(
 
   for (const candidate of models) {
     const normalized = normalizeModelSlug(candidate, provider);
+    const canonical = normalized ? canonicalModelSlugForProvider(normalized, provider) : null;
     if (
-      !normalized ||
-      normalized.length > MAX_CUSTOM_MODEL_LENGTH ||
-      builtInModelSlugs.has(normalized) ||
-      seen.has(normalized)
+      !canonical ||
+      canonical.length > MAX_CUSTOM_MODEL_LENGTH ||
+      builtInModelSlugs.has(canonical) ||
+      seen.has(canonical)
     ) {
       continue;
     }
 
-    seen.add(normalized);
-    normalizedModels.push(normalized);
+    seen.add(canonical);
+    normalizedModels.push(canonical);
     if (normalizedModels.length >= MAX_CUSTOM_MODEL_COUNT) {
       break;
     }
@@ -233,9 +268,12 @@ export function resolveAppModelSelection(
   selectedModel: string | null | undefined,
 ): string {
   const resolvedProvider = resolveSelectableProvider(providers, provider);
+  const resolvedSelectedModel = selectedModel
+    ? canonicalModelSlugForProvider(selectedModel, resolvedProvider)
+    : selectedModel;
   const options = getAppModelOptions(settings, providers, resolvedProvider, selectedModel);
   return (
-    resolveSelectableModel(resolvedProvider, selectedModel, options) ??
+    resolveSelectableModel(resolvedProvider, resolvedSelectedModel, options) ??
     getDefaultServerModel(providers, resolvedProvider)
   );
 }
@@ -251,8 +289,11 @@ export function resolveAppModelSelectionForInstance(
   );
   if (!entry) return null;
   const options = getAppModelOptionsForInstance(settings, entry);
+  const resolvedSelectedModel = selectedModel
+    ? canonicalModelSlugForProvider(selectedModel, entry.driverKind)
+    : selectedModel;
   return (
-    resolveSelectableModel(entry.driverKind, selectedModel, options) ??
+    resolveSelectableModel(entry.driverKind, resolvedSelectedModel, options) ??
     options.find((option) => option.availability !== "unavailable")?.slug ??
     entry.models.find((model) => model.availability !== "unavailable")?.slug ??
     null
@@ -308,7 +349,9 @@ export function resolveAppModelSelectionState(
       model,
       models: entry.models,
       prompt: "",
-      modelOptions: selectedEntry ? selection.options : undefined,
+      modelOptions: selectedEntry
+        ? modelOptionsForSelection(provider, selection.model, selection.options)
+        : undefined,
     });
 
     return createModelSelection(entry.instanceId, model, modelOptionsForDispatch);

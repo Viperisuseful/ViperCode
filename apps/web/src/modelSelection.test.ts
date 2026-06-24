@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "./providerInstances";
 import {
   getAppModelOptionsForInstance,
+  normalizeCustomModelSlugs,
   resolveAppModelSelectionForInstance,
   resolveAppModelSelectionState,
 } from "./modelSelection";
@@ -12,6 +13,7 @@ function provider(input: {
   provider?: ProviderDriverKind;
   instanceId: string;
   models?: ReadonlyArray<string>;
+  modelCapabilitiesBySlug?: Record<string, ServerProvider["models"][number]["capabilities"]>;
 }): ServerProvider {
   const driver =
     input.provider ??
@@ -31,7 +33,7 @@ function provider(input: {
       slug,
       name: slug,
       isCustom: false,
-      capabilities: {},
+      capabilities: input.modelCapabilitiesBySlug?.[slug] ?? {},
     })),
     slashCommands: [],
     skills: [],
@@ -55,6 +57,57 @@ function settingsWithProviderInstances(): UnifiedSettings {
 }
 
 describe("instance-scoped model selection", () => {
+  it("hides legacy Antigravity Pro low/high custom rows behind the built-in Pro selector", () => {
+    const antigravity = ProviderDriverKind.make("antigravity");
+    expect(
+      normalizeCustomModelSlugs(
+        ["gemini-3.1-pro-low", "gemini-3.1-pro-high"],
+        new Set(["gemini-3.1-pro"]),
+        antigravity,
+      ),
+    ).toEqual([]);
+  });
+
+  it("preserves the legacy Antigravity high selection as the Pro thinking option", () => {
+    const antigravity = ProviderDriverKind.make("antigravity");
+    const providers = [
+      provider({
+        provider: antigravity,
+        instanceId: "antigravity",
+        models: ["gemini-3.5-flash", "gemini-3.1-pro"],
+        modelCapabilitiesBySlug: {
+          "gemini-3.1-pro": {
+            optionDescriptors: [
+              {
+                id: "thinkingLevel",
+                label: "Thinking",
+                type: "select",
+                currentValue: "low",
+                options: [
+                  { id: "low", label: "Low", isDefault: true },
+                  { id: "high", label: "High" },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ];
+    const settings: UnifiedSettings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      textGenerationModelSelection: {
+        instanceId: ProviderInstanceId.make("antigravity"),
+        model: "gemini-3.1-pro-high",
+      },
+    };
+
+    expect(resolveAppModelSelectionState(settings, providers)).toEqual({
+      instanceId: ProviderInstanceId.make("antigravity"),
+      model: "gemini-3.1-pro",
+      options: [{ id: "thinkingLevel", value: "high" }],
+    });
+  });
+
   it("keeps custom models on the provider instance that declared them", () => {
     const providers = [
       provider({
