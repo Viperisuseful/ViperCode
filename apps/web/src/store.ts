@@ -843,6 +843,22 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
   return "completed" as const;
 }
 
+function terminalLatestTurnStateForSession(status: OrchestrationSessionStatus) {
+  switch (status) {
+    case "ready":
+      return "completed" as const;
+    case "error":
+      return "error" as const;
+    case "interrupted":
+    case "stopped":
+      return "interrupted" as const;
+    case "idle":
+    case "starting":
+    case "running":
+      return null;
+  }
+}
+
 function compareActivities(
   left: Thread["activities"][number],
   right: Thread["activities"][number],
@@ -883,6 +899,32 @@ function buildLatestTurn(params: {
     assistantMessageId: params.assistantMessageId,
     ...(resolvedPlan ? { sourceProposedPlan: resolvedPlan } : {}),
   };
+}
+
+function settleLatestTurnForSession(
+  thread: Thread,
+  session: OrchestrationSession,
+): Thread["latestTurn"] {
+  if (session.status === "running" || session.activeTurnId !== null) {
+    return thread.latestTurn;
+  }
+  const latestTurn = thread.latestTurn;
+  if (!latestTurn || latestTurn.completedAt !== null || latestTurn.state !== "running") {
+    return latestTurn;
+  }
+  const terminalState = terminalLatestTurnStateForSession(session.status);
+  if (terminalState === null) {
+    return latestTurn;
+  }
+  return buildLatestTurn({
+    previous: latestTurn,
+    turnId: latestTurn.turnId,
+    state: terminalState,
+    requestedAt: latestTurn.requestedAt,
+    startedAt: latestTurn.startedAt ?? session.updatedAt,
+    completedAt: session.updatedAt,
+    assistantMessageId: latestTurn.assistantMessageId,
+  });
 }
 
 function rebindTurnDiffSummariesForAssistantMessage(
@@ -1460,34 +1502,37 @@ function applyEnvironmentOrchestrationEvent(
       });
 
     case "thread.session-set":
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
-        session: mapSession(event.payload.session),
-        error: sanitizeThreadErrorMessage(event.payload.session.lastError),
-        latestTurn:
-          event.payload.session.status === "running" && event.payload.session.activeTurnId !== null
-            ? buildLatestTurn({
-                previous: thread.latestTurn,
-                turnId: event.payload.session.activeTurnId,
-                state: "running",
-                requestedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.requestedAt
-                    : event.payload.session.updatedAt,
-                startedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.session.updatedAt)
-                    : event.payload.session.updatedAt,
-                completedAt: null,
-                assistantMessageId:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.assistantMessageId
-                    : null,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
-              })
-            : thread.latestTurn,
-        updatedAt: event.occurredAt,
-      }));
+      return updateThreadState(state, event.payload.threadId, (thread) => {
+        const session = event.payload.session;
+        return {
+          ...thread,
+          session: mapSession(session),
+          error: sanitizeThreadErrorMessage(session.lastError),
+          latestTurn:
+            session.status === "running" && session.activeTurnId !== null
+              ? buildLatestTurn({
+                  previous: thread.latestTurn,
+                  turnId: session.activeTurnId,
+                  state: "running",
+                  requestedAt:
+                    thread.latestTurn?.turnId === session.activeTurnId
+                      ? thread.latestTurn.requestedAt
+                      : session.updatedAt,
+                  startedAt:
+                    thread.latestTurn?.turnId === session.activeTurnId
+                      ? (thread.latestTurn.startedAt ?? session.updatedAt)
+                      : session.updatedAt,
+                  completedAt: null,
+                  assistantMessageId:
+                    thread.latestTurn?.turnId === session.activeTurnId
+                      ? thread.latestTurn.assistantMessageId
+                      : null,
+                  sourceProposedPlan: thread.pendingSourceProposedPlan,
+                })
+              : settleLatestTurnForSession(thread, session),
+          updatedAt: event.occurredAt,
+        };
+      });
 
     case "thread.session-stop-requested":
       return updateThreadState(state, event.payload.threadId, (thread) =>
