@@ -374,9 +374,16 @@ export const probeAntigravitySdkPath = Effect.fn("probeAntigravitySdkPath")(func
   pythonPath: string,
   environment: NodeJS.ProcessEnv,
 ): Effect.fn.Return<SdkProbeResult, never, ChildProcessSpawner.ChildProcessSpawner> {
+  // Never run through a shell: the `-c` payload is a multi-line script with
+  // spaces, and the platform child-process layer concatenates args for the
+  // shell WITHOUT escaping. On Windows cmd.exe that mangles the newlines into a
+  // SyntaxError, so the SDK probe always failed and reported the SDK missing
+  // even when it was installed. With shell:false the script is passed verbatim
+  // as a single argument. `python` / `python.exe` resolve fine without a shell;
+  // only `.cmd`/`.bat` shims would need one, which is not how Python ships.
   const command = ChildProcess.make(pythonPath, ["-c", SDK_PROBE_SCRIPT], {
     env: environment as Record<string, string | undefined>,
-    shell: process.platform === "win32",
+    shell: false,
   });
   const probe = yield* spawnAndCollect(pythonPath, command).pipe(
     Effect.timeoutOption(DEFAULT_TIMEOUT_MS),

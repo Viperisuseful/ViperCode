@@ -119,19 +119,19 @@ export const makeAntigravityBridgeProcess = (
     );
     const pendingRef = yield* Ref.make(new Map<string, PendingRequest>());
 
-    // On Windows bare command names and `.cmd` shims require a shell, and Node
-    // concatenates argv for the shell without escaping — quote whitespace.
-    const useShell = process.platform === "win32";
-    const quoteForShell = (value: string): string =>
-      useShell && /\s/.test(value) && !/^".*"$/.test(value) ? `"${value}"` : value;
-
+    // Spawn the Python bridge WITHOUT a shell. The platform layer concatenates
+    // argv for a shell without escaping, so on Windows cmd.exe a `pythonPath` or
+    // `bridgePath` containing spaces (e.g. a packaged "Program Files" path) gets
+    // split into broken arguments, and the cmd.exe wrapper also sits between us
+    // and the child's NDJSON stdio. `python` / `python.exe` resolve fine without
+    // a shell; the resolved interpreter from the SDK probe is a full .exe path.
     const args = [options.bridgePath, ...(options.extraArgs ?? [])];
     const child = yield* spawner
       .spawn(
-        ChildProcess.make(quoteForShell(options.pythonPath), args.map(quoteForShell), {
+        ChildProcess.make(options.pythonPath, args, {
           ...(options.cwd ? { cwd: options.cwd } : {}),
           ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
-          shell: useShell,
+          shell: false,
         }),
       )
       .pipe(
