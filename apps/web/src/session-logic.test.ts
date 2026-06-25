@@ -1517,4 +1517,38 @@ describe("deriveActiveWorkStartedAt", () => {
       ),
     ).toBe("2026-02-27T21:11:00.000Z");
   });
+
+  it("uses the fresh send start when persisted running state points at an older latest turn", () => {
+    expect(
+      deriveActiveWorkStartedAt(
+        {
+          turnId: TurnId.make("turn-stale"),
+          startedAt: "2026-02-26T21:10:00.000Z",
+          completedAt: null,
+        },
+        {
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.make("turn-stale"),
+        },
+        "2026-02-27T21:11:00.000Z",
+      ),
+    ).toBe("2026-02-27T21:11:00.000Z");
+  });
+
+  it("uses the fresh send start when the session is running but has no active turn id yet", () => {
+    expect(
+      deriveActiveWorkStartedAt(
+        {
+          turnId: TurnId.make("turn-stale"),
+          startedAt: "2026-02-26T21:10:00.000Z",
+          completedAt: null,
+        },
+        {
+          orchestrationStatus: "running",
+          activeTurnId: undefined,
+        },
+        "2026-02-27T21:11:00.000Z",
+      ),
+    ).toBe("2026-02-27T21:11:00.000Z");
+  });
 });

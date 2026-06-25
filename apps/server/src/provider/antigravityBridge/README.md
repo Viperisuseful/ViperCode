@@ -22,8 +22,13 @@ Implemented without third-party imports:
 | `initialize` | Returns `{ protocolVersion }`.                                |
 | `probe`      | Returns `{ sdkAvailable, sdkVersion, python }` for status UI. |
 
-Session methods lazily import `google.antigravity` and drive the live SDK for
-API-key and Vertex/ADC-backed sessions:
+Session methods use two runtimes:
+
+- no-project `google-oauth`, `agy-oauth`, and `auto` use the authenticated
+  `agy -p` CLI path. This path does not import `google.antigravity`; it relies
+  on the same Antigravity CLI auth/keyring state as the user's terminal.
+- API-key and project/location Vertex/ADC sessions lazily import
+  `google.antigravity` and drive the live SDK.
 
 - `start_session`
 - `send_turn`
@@ -53,14 +58,17 @@ token profile at `~/.gemini/antigravity-cli/antigravity-oauth-token`.
 `google-oauth` does not fall back to API-key auth when project/location are
 absent. Instead, no-project `google-oauth`, `agy-oauth`, and `auto` use the
 authenticated `agy -p` CLI path and read model output from the CLI transcript
-store. `api-key` mode is available as an explicit fallback and relies on
+store. When ViperCode's runtime mode maps to `always-proceed`, the bridge passes
+`--dangerously-skip-permissions` to `agy` so CLI tool prompts do not block a
+headless turn. `api-key` mode is available as an explicit fallback and relies on
 `GEMINI_API_KEY`.
 
 ## Requirements
 
 - Python 3.9+ (stdlib only for the transport/probe).
-- `pip install google-antigravity` for session functionality (probe reports
-  availability without it).
+- `agy` installed and signed in for CLI-auth session functionality.
+- `pip install google-antigravity` only for SDK-backed API-key or Vertex/ADC
+  session functionality (probe reports availability without it).
 
 ## Manual smoke test
 

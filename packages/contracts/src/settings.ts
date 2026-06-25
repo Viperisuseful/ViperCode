@@ -350,12 +350,11 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
-// Google Antigravity. SDK-first provider: the `agy` CLI handles install, auth,
-// and version probing; the Python SDK (`google-antigravity`) drives streaming
-// sessions through a ViperCode-owned bridge process. `toolPermission` is kept
-// as a free-form string (validated in the UI) because the upstream enum is
-// young and may grow; the known values today are `request-review`,
-// `proceed-in-sandbox`, `always-proceed`, and `strict`.
+// Google Antigravity. CLI-auth sessions run through `agy -p`; SDK-backed
+// sessions are only used for explicit API-key or Vertex/ADC project setups.
+// `toolPermission` is kept as a free-form string (validated in the UI) because
+// the upstream enum is young and may grow; the known values today are
+// `request-review`, `proceed-in-sandbox`, `always-proceed`, and `strict`.
 export const ANTIGRAVITY_DEFAULT_TOOL_PERMISSION = "request-review";
 export const ANTIGRAVITY_DEFAULT_AUTH_MODE = "google-oauth";
 export const ANTIGRAVITY_DEFAULT_GCP_LOCATION = "us-central1";
@@ -377,7 +376,8 @@ export const AntigravitySettings = makeProviderSettingsSchema(
     pythonPath: makeBinaryPathSetting("python").pipe(
       Schema.annotateKey({
         title: "Python path",
-        description: "Python executable used to launch the Antigravity SDK bridge.",
+        description:
+          "Python executable used to launch the Antigravity bridge. The google-antigravity SDK is only required for API-key or Vertex/ADC sessions.",
         providerSettingsForm: { placeholder: "python", clearWhenEmpty: "omit" },
       }),
     ),
@@ -386,7 +386,7 @@ export const AntigravitySettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Auth mode",
         description:
-          "Authentication mode. google-oauth uses OAuth/ADC when project settings are present and can reuse agy OAuth from bearer tokens, Windows keyring, or readable CLI profiles otherwise; agy-oauth forces agy OAuth reuse; api-key uses GEMINI_API_KEY only when explicitly selected.",
+          "Authentication mode. google-oauth uses `agy -p` CLI auth unless project settings are present for Vertex/ADC; agy-oauth forces `agy` CLI auth; api-key uses GEMINI_API_KEY only when explicitly selected.",
         providerSettingsForm: {
           placeholder: ANTIGRAVITY_DEFAULT_AUTH_MODE,
           clearWhenEmpty: "omit",
@@ -448,7 +448,7 @@ export const AntigravitySettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Tool permission",
         description:
-          "Default tool-permission policy: request-review, proceed-in-sandbox, always-proceed, or strict. ViperCode approvals remain authoritative.",
+          "Default tool-permission policy: request-review, proceed-in-sandbox, always-proceed, or strict. always-proceed passes --dangerously-skip-permissions to agy CLI-auth turns.",
         providerSettingsForm: {
           placeholder: ANTIGRAVITY_DEFAULT_TOOL_PERMISSION,
           clearWhenEmpty: "omit",

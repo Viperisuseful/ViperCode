@@ -121,7 +121,7 @@ Available models:
     }),
   );
 
-  it.effect("warns when OAuth/ADC is selected but project setup is incomplete", () =>
+  it.effect("reports the default no-project OAuth mode as CLI-runtime ready", () =>
     Effect.gen(function* () {
       const snapshot = yield* probe({}, (command, args) =>
         command === "python"
@@ -131,12 +131,11 @@ Available models:
             : { stdout: "agy version 1.2.3" },
       );
       expect(snapshot.installed).toBe(true);
-      expect(snapshot.status).toBe("warning");
-      expect(snapshot.version).toBe("0.3.0");
-      expect(snapshot.auth.status).toBe("unauthenticated");
+      expect(snapshot.status).toBe("ready");
+      expect(snapshot.version).toBe("1.2.3");
+      expect(snapshot.auth.status).toBe("unknown");
       expect(snapshot.auth.type).toBe("google-oauth");
-      expect(snapshot.message).toContain("Using Python: python");
-      expect(snapshot.message).toContain("OAuth auth is selected");
+      expect(snapshot.message).toContain("CLI runtime ready");
     }),
   );
 
@@ -160,7 +159,7 @@ Available models:
     }),
   );
 
-  it.effect("explains agy auth refresh when forced CLI OAuth has no readable token", () =>
+  it.effect("reports forced CLI OAuth as agy-runtime ready", () =>
     Effect.gen(function* () {
       const snapshot = yield* probe({ authMode: "agy-oauth" }, (command, args) =>
         command === "python"
@@ -169,10 +168,10 @@ Available models:
             ? { stdout: "" }
             : { stdout: "agy version 1.2.3" },
       );
-      expect(snapshot.status).toBe("warning");
-      expect(snapshot.auth.status).toBe("unauthenticated");
+      expect(snapshot.status).toBe("ready");
+      expect(snapshot.auth.status).toBe("unknown");
       expect(snapshot.message).toContain("agy");
-      expect(snapshot.message).toContain("keyring");
+      expect(snapshot.message).toContain("CLI runtime ready");
     }),
   );
 
@@ -261,9 +260,9 @@ Available models:
     }),
   );
 
-  it.effect("warns to pip install the SDK when only the CLI is present", () =>
+  it.effect("warns to pip install the SDK when an SDK-backed session only has the CLI", () =>
     Effect.gen(function* () {
-      const snapshot = yield* probe({}, (command) =>
+      const snapshot = yield* probe({ gcpProject: "viper-project" }, (command) =>
         command === "python"
           ? { stdout: '{"sdkAvailable": false, "sdkVersion": null}' }
           : { stdout: "agy version 1.2.3" },

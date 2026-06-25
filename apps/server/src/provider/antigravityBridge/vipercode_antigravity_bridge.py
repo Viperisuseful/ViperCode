@@ -773,6 +773,7 @@ class BridgeSession:
     cli_app_data_dir: Optional[str] = None
     cli_last_step_index: int = -1
     cli_turn_count: int = 0
+    cli_skip_permissions: bool = False
     current_turn_id: Optional[str] = None
     current_response: Any = None
     current_task: Optional[asyncio.Task[None]] = None
@@ -950,6 +951,7 @@ class Bridge:
             cli_model=model_name,
             cli_app_data_dir=str(app_data_dir),
             cli_last_step_index=last_step,
+            cli_skip_permissions=str(request.get("toolPermission") or "") == "always-proceed",
         )
         self.sessions[session_id] = session
         _emit(
@@ -962,8 +964,6 @@ class Bridge:
         return {"sessionId": session_id, "conversationId": conversation_id}
 
     async def start_session(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        from google.antigravity import Agent, CapabilitiesConfig, LocalAgentConfig, hooks, policy, types
-
         session_id = request.get("sessionId")
         cwd = request.get("cwd")
         if not isinstance(session_id, str) or not session_id:
@@ -976,6 +976,60 @@ class Bridge:
             await self._stop_session(existing, emit_exit=True)
 
         loop = self.loop or asyncio.get_running_loop()
+
+        model = request.get("model")
+        model_name = model.strip() if isinstance(model, str) and model.strip() else None
+        auth_mode = str(request.get("authMode") or "google-oauth").strip() or "google-oauth"
+        project: Optional[str] = None
+        location: Optional[str] = None
+        wants_cli_runtime = False
+        if auth_mode in {"google-oauth", "vertex-adc", "adc", "oauth"}:
+            project = _request_first(
+                request,
+                "gcpProject",
+                "GOOGLE_CLOUD_PROJECT",
+                "GCLOUD_PROJECT",
+                "CLOUDSDK_CORE_PROJECT",
+            )
+            location = _request_first(
+                request,
+                "gcpLocation",
+                "GOOGLE_CLOUD_LOCATION",
+                "GOOGLE_VERTEX_LOCATION",
+                "GOOGLE_CLOUD_REGION",
+            )
+            wants_cli_runtime = not (project and location)
+        elif auth_mode in {"agy-oauth", "cli-oauth", "antigravity-cli-oauth"}:
+            wants_cli_runtime = True
+        elif auth_mode in {"api-key", "gemini-api-key"}:
+            pass
+        elif auth_mode == "auto":
+            project = _request_first(
+                request,
+                "gcpProject",
+                "GOOGLE_CLOUD_PROJECT",
+                "GCLOUD_PROJECT",
+                "CLOUDSDK_CORE_PROJECT",
+            )
+            location = _request_first(
+                request,
+                "gcpLocation",
+                "GOOGLE_CLOUD_LOCATION",
+                "GOOGLE_VERTEX_LOCATION",
+                "GOOGLE_CLOUD_REGION",
+            )
+            wants_cli_runtime = not (project and location)
+        else:
+            raise BridgeRequestError(
+                f"Unsupported Antigravity auth mode: {auth_mode}", "invalid_auth_mode"
+            )
+
+        if wants_cli_runtime:
+            return self._start_cli_session(
+                request, session_id=session_id, cwd=cwd, loop=loop, model_name=model_name
+            )
+
+        from google.antigravity import Agent, CapabilitiesConfig, LocalAgentConfig, hooks, policy, types
 
         async def ask_user(tool_call: Any) -> bool:
             name = _tool_name(getattr(tool_call, "name", "tool"))
@@ -1059,68 +1113,12 @@ class Bridge:
             "policies": policies,
             "workspaces": workspaces,
         }
-        model = request.get("model")
-        model_name = model.strip() if isinstance(model, str) and model.strip() else None
         if model_name:
             config_kwargs["model"] = model_name
-        image_model = _request_first(request, "imageModel", "ANTIGRAVITY_IMAGE_MODEL")
-        auth_mode = str(request.get("authMode") or "google-oauth").strip() or "google-oauth"
-        wants_cli_runtime = False
-        if auth_mode in {"google-oauth", "vertex-adc", "adc", "oauth"}:
-            project = _request_first(
-                request,
-                "gcpProject",
-                "GOOGLE_CLOUD_PROJECT",
-                "GCLOUD_PROJECT",
-                "CLOUDSDK_CORE_PROJECT",
-            )
-            location = _request_first(
-                request,
-                "gcpLocation",
-                "GOOGLE_CLOUD_LOCATION",
-                "GOOGLE_VERTEX_LOCATION",
-                "GOOGLE_CLOUD_REGION",
-            )
-            if project and location:
-                config_kwargs["vertex"] = True
-                config_kwargs["project"] = project
-                config_kwargs["location"] = location
-            else:
-                wants_cli_runtime = True
-        elif auth_mode in {"agy-oauth", "cli-oauth", "antigravity-cli-oauth"}:
-            wants_cli_runtime = True
-        elif auth_mode in {"api-key", "gemini-api-key"}:
-            pass
-        elif auth_mode == "auto":
-            project = _request_first(
-                request,
-                "gcpProject",
-                "GOOGLE_CLOUD_PROJECT",
-                "GCLOUD_PROJECT",
-                "CLOUDSDK_CORE_PROJECT",
-            )
-            location = _request_first(
-                request,
-                "gcpLocation",
-                "GOOGLE_CLOUD_LOCATION",
-                "GOOGLE_VERTEX_LOCATION",
-                "GOOGLE_CLOUD_REGION",
-            )
-            if project and location:
-                config_kwargs["vertex"] = True
-                config_kwargs["project"] = project
-                config_kwargs["location"] = location
-            else:
-                wants_cli_runtime = True
-        else:
-            if auth_mode not in {"api-key", "gemini-api-key"}:
-                raise BridgeRequestError(
-                    f"Unsupported Antigravity auth mode: {auth_mode}", "invalid_auth_mode"
-                )
-        if wants_cli_runtime:
-            return self._start_cli_session(
-                request, session_id=session_id, cwd=cwd, loop=loop, model_name=model_name
-            )
+        if project and location:
+            config_kwargs["vertex"] = True
+            config_kwargs["project"] = project
+            config_kwargs["location"] = location
         conversation_id = request.get("conversationId")
         if isinstance(conversation_id, str) and conversation_id.strip():
             config_kwargs["conversation_id"] = conversation_id.strip()
@@ -1301,6 +1299,8 @@ class Bridge:
         app_data_dir = Path(session.cli_app_data_dir) if session.cli_app_data_dir else Path.home() / ".gemini" / "antigravity-cli"
         before_step = session.cli_last_step_index
         args = [session.cli_path]
+        if session.cli_skip_permissions:
+            args.append("--dangerously-skip-permissions")
         if session.cli_model:
             args.extend(["--model", session.cli_model])
         if session.conversation_id:
@@ -1313,6 +1313,9 @@ class Bridge:
             env = dict(os.environ)
             if session.cli_app_data_dir:
                 env["ANTIGRAVITY_HOME"] = session.cli_app_data_dir
+            creationflags = 0
+            if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+                creationflags = subprocess.CREATE_NO_WINDOW
             return subprocess.run(
                 args,
                 cwd=session.cwd,
@@ -1323,6 +1326,7 @@ class Bridge:
                 text=True,
                 timeout=360,
                 check=False,
+                creationflags=creationflags,
             )
 
         result = await asyncio.to_thread(run_cli)

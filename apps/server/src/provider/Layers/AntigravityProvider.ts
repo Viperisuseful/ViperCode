@@ -328,6 +328,34 @@ function resolveAntigravityAuthStatus(
   };
 }
 
+function usesAntigravityCliRuntime(
+  settings: AntigravitySettings,
+  environment: NodeJS.ProcessEnv,
+): boolean {
+  const authMode = settings.authMode.trim() || "google-oauth";
+  if (["agy-oauth", "cli-oauth", "antigravity-cli-oauth"].includes(authMode)) {
+    return true;
+  }
+  if (!["google-oauth", "vertex-adc", "adc", "oauth", "auto"].includes(authMode)) {
+    return false;
+  }
+  const project = firstSettingOrEnv(
+    settings.gcpProject,
+    environment,
+    "GOOGLE_CLOUD_PROJECT",
+    "GCLOUD_PROJECT",
+    "CLOUDSDK_CORE_PROJECT",
+  );
+  const location = firstSettingOrEnv(
+    settings.gcpLocation,
+    environment,
+    "GOOGLE_CLOUD_LOCATION",
+    "GOOGLE_VERTEX_LOCATION",
+    "GOOGLE_CLOUD_REGION",
+  );
+  return !(project && location);
+}
+
 export function parseAntigravityCliModels(output: string): ReadonlyArray<string> {
   const names: string[] = [];
   const seen = new Set<string>();
@@ -527,6 +555,7 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
     const checkedAt = yield* nowIso;
     const models = modelsFor(settings);
     const auth = resolveAntigravityAuthStatus(settings, environment);
+    const cliRuntime = usesAntigravityCliRuntime(settings, environment);
 
     if (!settings.enabled) {
       return buildServerProvider({
@@ -589,12 +618,56 @@ export const checkAntigravityProviderStatus = Effect.fn("checkAntigravityProvide
     const dynamicModels = modelsFor(settings, discoveredModelNames);
 
     // SDK probe: importability of `google-antigravity` from the first candidate
-    // Python interpreter that actually has the package installed.
-    const sdk = yield* resolveAntigravityPythonProbe(settings, environment);
+    // Python interpreter that actually has the package installed. CLI-runtime
+    // sessions deliberately do not need the SDK package; they only need Python
+    // to launch the stdio bridge and `agy -p` to run the turn.
+    const sdk = cliRuntime
+      ? { available: false, version: null, pythonPath: settings.pythonPath }
+      : yield* resolveAntigravityPythonProbe(settings, environment);
 
-    // Combine: neither surface present is an error; CLI-only is a warning (SDK
-    // is required for streaming); SDK present is ready even when CLI auth still
-    // needs environment-backed model credentials.
+    if (cliRuntime) {
+      if (!cliInstalled) {
+        return buildServerProvider({
+          presentation: ANTIGRAVITY_PRESENTATION,
+          enabled: true,
+          checkedAt,
+          models: dynamicModels,
+          probe: {
+            installed: false,
+            version: null,
+            status: "error",
+            auth: auth.auth,
+            message:
+              "Antigravity CLI runtime is selected, but `agy` is not installed or was not found. Install Antigravity and run `agy -p hello` once to refresh sign-in.",
+          },
+        });
+      }
+
+      const message = cliFailedDetail
+        ? `Antigravity CLI detected, but the CLI probe failed: ${cliFailedDetail}`
+        : `Antigravity CLI runtime ready. Auth: ${auth.label}. OAuth and permissions are handled by \`agy\`; run \`agy -p hello\` if sign-in needs refreshing.`;
+      return buildServerProvider({
+        presentation: ANTIGRAVITY_PRESENTATION,
+        enabled: true,
+        checkedAt,
+        models: dynamicModels,
+        probe: {
+          installed: true,
+          version: cliVersion,
+          status: cliFailedDetail ? "warning" : "ready",
+          auth: {
+            ...auth.auth,
+            status: "unknown",
+            label: "Antigravity CLI auth via agy",
+          },
+          message,
+        },
+      });
+    }
+
+    // Combine for SDK-backed sessions: neither surface present is an error;
+    // CLI-only is a warning because the SDK is required for streaming SDK
+    // sessions; SDK present is ready even when CLI setup helpers are missing.
     if (!cliInstalled && !sdk.available) {
       return buildServerProvider({
         presentation: ANTIGRAVITY_PRESENTATION,

@@ -140,6 +140,13 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
 type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
 
+function isIsoAfter(left: string | null, right: string | null): boolean {
+  if (!left || !right) return false;
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs > rightMs;
+}
+
 export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
   session: SessionActivityState | null,
@@ -156,15 +163,23 @@ export function deriveActiveWorkStartedAt(
   session: SessionActivityState | null,
   sendStartedAt: string | null,
 ): string | null {
+  const sendStartedAfterOpenLatestTurn =
+    latestTurn?.completedAt === null && isIsoAfter(sendStartedAt, latestTurn.startedAt);
   const runningTurnId =
     session?.orchestrationStatus === "running" ? (session.activeTurnId ?? null) : null;
   if (runningTurnId !== null) {
     if (latestTurn?.turnId === runningTurnId) {
+      if (sendStartedAfterOpenLatestTurn) {
+        return sendStartedAt;
+      }
       return latestTurn.startedAt ?? sendStartedAt;
     }
     return sendStartedAt;
   }
   if (!isLatestTurnSettled(latestTurn, session)) {
+    if (sendStartedAfterOpenLatestTurn) {
+      return sendStartedAt;
+    }
     return latestTurn?.startedAt ?? sendStartedAt;
   }
   return sendStartedAt;
