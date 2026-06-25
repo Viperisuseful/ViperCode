@@ -55,30 +55,6 @@ describe("ChatMarkdown", () => {
     }
   });
 
-  it("renders bare file uri markdown links whose paths contain spaces", async () => {
-    const filePath = "C:/Users/viper/Documents/Viper Projects/ViperCode/README.md";
-    const screen = await render(
-      <ChatMarkdown
-        text={`[README.md](file:///${filePath})`}
-        cwd="C:/Users/viper/Documents/Viper Projects/ViperCode"
-      />,
-    );
-
-    try {
-      const link = page.getByRole("link", { name: "README.md" });
-      await expect.element(link).toBeInTheDocument();
-      await expect.element(link).toHaveAttribute("href", filePath);
-
-      await link.click();
-
-      await vi.waitFor(() => {
-        expect(openInPreferredEditorMock).toHaveBeenCalledWith(expect.anything(), filePath);
-      });
-    } finally {
-      await screen.unmount();
-    }
-  });
-
   it("keeps line anchors working after rewriting file uri hrefs", async () => {
     const filePath =
       "/Users/yashsingh/p/sco/claude-code-extract/src/utils/permissions/PermissionRule.ts";

@@ -38,45 +38,6 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
   return "completed" as const;
 }
 
-function terminalLatestTurnStateForSession(status: OrchestrationSession["status"]) {
-  switch (status) {
-    case "ready":
-      return "completed" as const;
-    case "error":
-      return "error" as const;
-    case "interrupted":
-    case "stopped":
-      return "interrupted" as const;
-    case "idle":
-    case "starting":
-    case "running":
-      return null;
-  }
-}
-
-function settleLatestTurnForSession(
-  thread: OrchestrationThread,
-  session: OrchestrationSession,
-): OrchestrationThread["latestTurn"] {
-  if (session.status === "running" || session.activeTurnId !== null) {
-    return thread.latestTurn;
-  }
-  const latestTurn = thread.latestTurn;
-  if (!latestTurn || latestTurn.completedAt !== null || latestTurn.state !== "running") {
-    return latestTurn;
-  }
-  const terminalState = terminalLatestTurnStateForSession(session.status);
-  if (terminalState === null) {
-    return latestTurn;
-  }
-  return {
-    ...latestTurn,
-    state: terminalState,
-    startedAt: latestTurn.startedAt ?? session.updatedAt,
-    completedAt: session.updatedAt,
-  };
-}
-
 function updateThread(
   threads: ReadonlyArray<OrchestrationThread>,
   threadId: ThreadId,
@@ -500,7 +461,7 @@ export function projectEvent(
                         ? thread.latestTurn.assistantMessageId
                         : null,
                   }
-                : settleLatestTurnForSession(thread, session),
+                : thread.latestTurn,
             updatedAt: event.occurredAt,
           }),
         };

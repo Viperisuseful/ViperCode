@@ -417,9 +417,7 @@ const runAntigravityCliCommand = Effect.fn("runAntigravityCliCommand")(function*
 ) {
   const command = ChildProcess.make(settings.binaryPath, [...args], {
     env: environment as Record<string, string | undefined>,
-    // `agy` installs as an .exe on Windows. Running it through a shell flashes
-    // cmd.exe in the desktop app, and is not needed for the version/model probes.
-    shell: false,
+    shell: process.platform === "win32",
   });
   return yield* spawnAndCollect(settings.binaryPath, command);
 });

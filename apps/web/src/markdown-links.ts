@@ -9,9 +9,6 @@ const RELATIVE_FILE_PATH_PATTERN = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+(?::\d
 const RELATIVE_FILE_NAME_PATTERN = /^[A-Za-z0-9._-]+\.[A-Za-z0-9_-]+(?::\d+){0,2}$/;
 const POSITION_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
 const POSITION_ONLY_PATTERN = /^\d+(?::\d+)?$/;
-const BARE_FILE_MARKDOWN_LINK_DESTINATION_PATTERN =
-  /(\[[^\]\n]*]\()(file:\/\/[^)\n<>]*\s[^)\n]*)(\))/g;
-const MARKDOWN_LINK_TITLE_SUFFIX_PATTERN = /^(.*?)(\s+["'][^"']*["'])$/;
 const POSIX_FILE_ROOT_PREFIXES = [
   "/Users/",
   "/home/",
@@ -48,18 +45,6 @@ function unwrapMarkdownLinkDestination(value: string): string {
 
 export function normalizeMarkdownLinkDestination(value: string): string {
   return unwrapMarkdownLinkDestination(value.trim());
-}
-
-export function normalizeBareFileMarkdownLinkDestinations(markdown: string): string {
-  return markdown.replace(
-    BARE_FILE_MARKDOWN_LINK_DESTINATION_PATTERN,
-    (_match, prefix: string, rawHref: string, suffix: string) => {
-      const titleMatch = rawHref.match(MARKDOWN_LINK_TITLE_SUFFIX_PATTERN);
-      const href = (titleMatch?.[1] ?? rawHref).trim();
-      const title = titleMatch?.[2] ?? "";
-      return `${prefix}<${href}>${title}${suffix}`;
-    },
-  );
 }
 
 function stripSearchAndHash(value: string): { path: string; hash: string } {

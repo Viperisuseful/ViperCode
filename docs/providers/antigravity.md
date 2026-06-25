@@ -104,11 +104,6 @@ profiles are refreshed when a refresh token is available. For default
 `google-oauth` without project/location, Viper Code uses `agy -p` and the CLI
 transcript store instead of the SDK Gemini API-key path. Viper Code does not
 fall back to `GEMINI_API_KEY` unless Auth mode is explicitly set to `api-key`.
-The `agy -p` path starts the CLI in non-interactive print mode with the prompt
-as the final argument, then tails the Antigravity transcript while the CLI is
-running. Current `agy` builds do not expose a reliable token-by-token stdout
-stream in non-TTY mode, so live updates depend on when the CLI flushes model
-entries to `transcript.jsonl`.
 
 API-key auth remains available as an explicit fallback by setting Auth mode to
 `api-key` and providing `GEMINI_API_KEY`.
@@ -171,14 +166,6 @@ Viper Code is the user-visible approval authority. Defaults are conservative:
 
 Non-workspace access and `always-proceed` are never enabled silently.
 
-For CLI-backed Antigravity OAuth sessions, Viper Code always launches
-`agy -p` with `--dangerously-skip-permissions`. This mirrors Antigravity's
-headless guidance for print mode: `agy -p` cannot route permission prompts back
-to Viper Code, so letting the CLI ask would leave the turn stuck with no usable
-response. Use CLI-backed Antigravity OAuth only in workspaces where you are
-comfortable allowing the agent to edit files and run tools without per-action
-confirmation.
-
 ## Troubleshooting
 
 - **"Antigravity is not installed."** Neither `agy` nor the SDK was found.
@@ -195,9 +182,8 @@ confirmation.
   profile/keyring entry. On Windows, Viper Code reads the `agy` keyring target
   `gemini:antigravity` directly.
 - **No-project `google-oauth` appears slower than SDK mode.** This path shells
-  out to `agy -p` and tails the CLI transcript while the command runs. It is
-  authenticated like the CLI, but current `agy` builds do not provide a
-  dependable token-by-token stdout stream for non-interactive callers.
+  out to `agy -p` and reads the CLI transcript after the command completes, so
+  it is authenticated like the CLI but does not stream token-by-token.
 - **API key fallback issues.** Set Auth mode to `api-key` and provide
   `GEMINI_API_KEY` in the provider or server environment.
 
